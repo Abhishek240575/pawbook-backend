@@ -241,5 +241,6 @@ router.use('/insurance',     require('./insurance'));
 router.use('/training',      require('./training'));
 router.use('/travel',        require('./travel'));
 router.use('/businesses', require('./business.routes'));
+router.use('/overpass', require('./overpass.routes'));
 
 module.exports = router;
