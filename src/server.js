@@ -15,7 +15,7 @@ const {
 const logger      = require('./utils/logger');
 
 const app  = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
 // ── SECURITY ──────────────────────────────────────────────────
 app.use(helmet());
