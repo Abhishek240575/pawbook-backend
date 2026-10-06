@@ -1,11 +1,11 @@
 // routes/notifications.js — User Notifications
 const express = require('express');
 const router  = express.Router();
-const { pool } = require('../db');
-const auth    = require('../middleware/auth');
+const { pool } = require('../config/db');
+const { authenticate } = require('../middleware');
 
 // GET /api/notifications — get notifications for current user
-router.get('/', auth, async (req, res) => {
+router.get('/', authenticate, async (req, res) => {
   const limit  = parseInt(req.query.limit)  || 30;
   const offset = parseInt(req.query.offset) || 0;
 
@@ -36,7 +36,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // PATCH /api/notifications/:id/read — mark single notification read
-router.patch('/:id/read', auth, async (req, res) => {
+router.patch('/:id/read', authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE notifications SET is_read=TRUE
@@ -53,7 +53,7 @@ router.patch('/:id/read', auth, async (req, res) => {
 });
 
 // PATCH /api/notifications/read-all — mark all notifications read
-router.patch('/read-all', auth, async (req, res) => {
+router.patch('/read-all', authenticate, async (req, res) => {
   try {
     const { rowCount } = await pool.query(
       `UPDATE notifications SET is_read=TRUE
@@ -68,7 +68,7 @@ router.patch('/read-all', auth, async (req, res) => {
 });
 
 // DELETE /api/notifications/:id — delete a notification
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', authenticate, async (req, res) => {
   try {
     const { rowCount } = await pool.query(
       `DELETE FROM notifications WHERE id=$1 AND user_id=$2`,

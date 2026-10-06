@@ -1,12 +1,12 @@
 // routes/appointments.js — Vet Appointment Booking
 const express = require('express');
 const router  = express.Router();
-const { pool } = require('../db');
-const auth    = require('../middleware/auth');
+const { pool } = require('../config/db');
+const { authenticate } = require('../middleware');
 const { v4: uuidv4 } = require('uuid');
 
 // POST /api/appointments — book a new appointment
-router.post('/', auth, async (req, res) => {
+router.post('/', authenticate, async (req, res) => {
   const {
     pet_id, vet_name, vet_spec, vet_img,
     consult_type, appt_date, appt_time, reason, fee
@@ -37,7 +37,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // GET /api/appointments/mine — list all appointments for current user
-router.get('/mine', auth, async (req, res) => {
+router.get('/mine', authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT a.*, p.name AS pet_name
@@ -55,7 +55,7 @@ router.get('/mine', auth, async (req, res) => {
 });
 
 // PATCH /api/appointments/:id/reschedule — change date/time
-router.patch('/:id/reschedule', auth, async (req, res) => {
+router.patch('/:id/reschedule', authenticate, async (req, res) => {
   const { appt_date, appt_time } = req.body;
   if (!appt_date || !appt_time) {
     return res.status(400).json({ error: 'appt_date and appt_time required' });
@@ -78,7 +78,7 @@ router.patch('/:id/reschedule', auth, async (req, res) => {
 });
 
 // DELETE /api/appointments/:id — cancel with refund calculation
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', authenticate, async (req, res) => {
   const { cancel_reason } = req.body || {};
 
   try {

@@ -1,11 +1,11 @@
 // routes/groups.js — Pet Owner Groups & Memberships
 const express = require('express');
 const router  = express.Router();
-const { pool } = require('../db');
-const auth    = require('../middleware/auth');
+const { pool } = require('../config/db');
+const { authenticate } = require('../middleware');
 
 // GET /api/groups — list all public groups (+ user's private ones)
-router.get('/', auth, async (req, res) => {
+router.get('/', authenticate, async (req, res) => {
   const { category, search } = req.query;
   let query = `
     SELECT g.*, u.name AS owner_name,
@@ -32,7 +32,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // GET /api/groups/:id — group detail with membership status
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT g.*, u.name AS owner_name,
@@ -52,7 +52,7 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // POST /api/groups — create a new group
-router.post('/', auth, async (req, res) => {
+router.post('/', authenticate, async (req, res) => {
   const { name, description, cover_img, privacy, category } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
 
@@ -86,7 +86,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // POST /api/groups/:id/join — join a group
-router.post('/:id/join', auth, async (req, res) => {
+router.post('/:id/join', authenticate, async (req, res) => {
   try {
     // Check group exists & is public (or user was invited)
     const { rows: [group] } = await pool.query(
@@ -118,7 +118,7 @@ router.post('/:id/join', auth, async (req, res) => {
 });
 
 // DELETE /api/groups/:id/leave — leave a group
-router.delete('/:id/leave', auth, async (req, res) => {
+router.delete('/:id/leave', authenticate, async (req, res) => {
   try {
     const { rowCount } = await pool.query(
       `DELETE FROM group_memberships WHERE group_id=$1 AND user_id=$2`,
@@ -139,7 +139,7 @@ router.delete('/:id/leave', auth, async (req, res) => {
 });
 
 // GET /api/groups/:id/members — list group members
-router.get('/:id/members', auth, async (req, res) => {
+router.get('/:id/members', authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT gm.role, gm.joined_at, u.id, u.name, u.avatar

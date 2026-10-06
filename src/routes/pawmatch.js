@@ -1,11 +1,11 @@
 // routes/pawmatch.js — PawMatch Swipe & Matches
 const express = require('express');
 const router  = express.Router();
-const { pool } = require('../db');
-const auth    = require('../middleware/auth');
+const { pool } = require('../config/db');
+const { authenticate } = require('../middleware');
 
 // GET /api/pawmatch/discover?pet_id=X — get pets to swipe (not already swiped)
-router.get('/discover', auth, async (req, res) => {
+router.get('/discover', authenticate, async (req, res) => {
   const { pet_id } = req.query;
   if (!pet_id) return res.status(400).json({ error: 'pet_id required' });
 
@@ -38,7 +38,7 @@ router.get('/discover', auth, async (req, res) => {
 });
 
 // POST /api/pawmatch/swipe — record a swipe; returns match if mutual
-router.post('/swipe', auth, async (req, res) => {
+router.post('/swipe', authenticate, async (req, res) => {
   const { swiper_pet_id, swiped_pet_id, direction } = req.body;
   if (!swiper_pet_id || !swiped_pet_id || !direction) {
     return res.status(400).json({ error: 'swiper_pet_id, swiped_pet_id, direction required' });
@@ -125,7 +125,7 @@ router.post('/swipe', auth, async (req, res) => {
 });
 
 // GET /api/pawmatch/matches?pet_id=X — list matches for a pet
-router.get('/matches', auth, async (req, res) => {
+router.get('/matches', authenticate, async (req, res) => {
   const { pet_id } = req.query;
   if (!pet_id) return res.status(400).json({ error: 'pet_id required' });
 

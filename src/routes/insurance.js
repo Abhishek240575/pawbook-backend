@@ -1,11 +1,11 @@
 // routes/insurance.js — Pet Insurance Policies
 const express = require('express');
 const router  = express.Router();
-const { pool } = require('../db');
-const auth    = require('../middleware/auth');
+const { pool } = require('../config/db');
+const { authenticate } = require('../middleware');
 
 // GET /api/insurance — list all policies for current user
-router.get('/', auth, async (req, res) => {
+router.get('/', authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT i.*, p.name AS pet_name
@@ -23,7 +23,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // POST /api/insurance — add a new policy
-router.post('/', auth, async (req, res) => {
+router.post('/', authenticate, async (req, res) => {
   const {
     pet_id, provider, plan_name, policy_number,
     premium, coverage, start_date, end_date
@@ -59,7 +59,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // PUT /api/insurance/:id — update a policy
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', authenticate, async (req, res) => {
   const {
     provider, plan_name, policy_number,
     premium, coverage, start_date, end_date, status
@@ -92,7 +92,7 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // DELETE /api/insurance/:id — delete a policy
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', authenticate, async (req, res) => {
   try {
     const { rowCount } = await pool.query(
       `DELETE FROM insurance_policies WHERE id=$1 AND user_id=$2`,

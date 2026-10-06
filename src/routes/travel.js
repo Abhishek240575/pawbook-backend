@@ -1,11 +1,11 @@
 // routes/travel.js — Pet Travel Plans
 const express = require('express');
 const router  = express.Router();
-const { pool } = require('../db');
-const auth    = require('../middleware/auth');
+const { pool } = require('../config/db');
+const { authenticate } = require('../middleware');
 
 // GET /api/travel — list travel plans for current user
-router.get('/', auth, async (req, res) => {
+router.get('/', authenticate, async (req, res) => {
   const { status } = req.query;
   let query = `
     SELECT t.*, p.name AS pet_name
@@ -27,7 +27,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // POST /api/travel — create a travel plan
-router.post('/', auth, async (req, res) => {
+router.post('/', authenticate, async (req, res) => {
   const {
     pet_id, destination, travel_date, return_date,
     transport, accommodation, notes
@@ -62,7 +62,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // PUT /api/travel/:id — update a travel plan
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', authenticate, async (req, res) => {
   const {
     destination, travel_date, return_date,
     transport, accommodation, notes, status
@@ -93,7 +93,7 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // PATCH /api/travel/:id/status — update status (planned|ongoing|completed)
-router.patch('/:id/status', auth, async (req, res) => {
+router.patch('/:id/status', authenticate, async (req, res) => {
   const { status } = req.body;
   if (!['planned','ongoing','completed'].includes(status)) {
     return res.status(400).json({ error: 'status must be planned|ongoing|completed' });
@@ -112,7 +112,7 @@ router.patch('/:id/status', auth, async (req, res) => {
 });
 
 // DELETE /api/travel/:id
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', authenticate, async (req, res) => {
   try {
     const { rowCount } = await pool.query(
       `DELETE FROM travel_plans WHERE id=$1 AND user_id=$2`,

@@ -241,6 +241,17 @@ router.use('/groups-v2',     require('./groups'));
 router.use('/insurance-v2',  require('./insurance'));
 router.use('/training-v2',   require('./training'));
 router.use('/travel',        require('./travel'));
+
+// ── NEW FEATURE ROUTES ────────────────────────────────────────────
+router.use('/appointments',  require('./appointments'));
+router.use('/pawmatch',      require('./pawmatch'));
+router.use('/vaccinations',  require('./vaccinations'));
+router.use('/reviews',       require('./reviews'));
+router.use('/notifications', require('./notifications'));
+router.use('/groups-v2',     require('./groups'));
+router.use('/insurance-v2',  require('./insurance'));
+router.use('/training-v2',   require('./training'));
+router.use('/travel',        require('./travel'));
 module.exports = router;
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -334,6 +345,17 @@ trainingRouter.patch('/sessions/:session_id', authenticate, [
   body('status').optional().isIn(['scheduled', 'in_progress', 'completed', 'cancelled']),
 ], validate, analyticsCtrl.updateTrainingProgress);
 router.use('/training', trainingRouter);
+
+// ── NEW FEATURE ROUTES ────────────────────────────────────────────
+router.use('/appointments',  require('./appointments'));
+router.use('/pawmatch',      require('./pawmatch'));
+router.use('/vaccinations',  require('./vaccinations'));
+router.use('/reviews',       require('./reviews'));
+router.use('/notifications', require('./notifications'));
+router.use('/groups-v2',     require('./groups'));
+router.use('/insurance-v2',  require('./insurance'));
+router.use('/training-v2',   require('./training'));
+router.use('/travel',        require('./travel'));
 
 // ── NEW FEATURE ROUTES ────────────────────────────────────────────
 router.use('/appointments',  require('./appointments'));

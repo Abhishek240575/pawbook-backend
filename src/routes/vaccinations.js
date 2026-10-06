@@ -1,11 +1,11 @@
 // routes/vaccinations.js — Pet Vaccination Records
 const express = require('express');
 const router  = express.Router();
-const { pool } = require('../db');
-const auth    = require('../middleware/auth');
+const { pool } = require('../config/db');
+const { authenticate } = require('../middleware');
 
 // GET /api/vaccinations?pet_id=X — list vaccinations for a pet
-router.get('/', auth, async (req, res) => {
+router.get('/', authenticate, async (req, res) => {
   const { pet_id } = req.query;
   if (!pet_id) return res.status(400).json({ error: 'pet_id required' });
 
@@ -24,7 +24,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // POST /api/vaccinations — add a vaccination record
-router.post('/', auth, async (req, res) => {
+router.post('/', authenticate, async (req, res) => {
   const {
     pet_id, vaccine_name, given_date, next_due_date,
     vet_name, clinic_name, batch_number, notes, doc_url
@@ -60,7 +60,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // PUT /api/vaccinations/:id — update a vaccination record
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', authenticate, async (req, res) => {
   const {
     vaccine_name, given_date, next_due_date,
     vet_name, clinic_name, batch_number, notes, doc_url
@@ -93,7 +93,7 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // DELETE /api/vaccinations/:id
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', authenticate, async (req, res) => {
   try {
     const { rowCount } = await pool.query(
       `DELETE FROM vaccinations WHERE id=$1 AND user_id=$2`,

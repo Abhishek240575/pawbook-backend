@@ -1,11 +1,11 @@
 // routes/training.js — Pet Training Sessions
 const express = require('express');
 const router  = express.Router();
-const { pool } = require('../db');
-const auth    = require('../middleware/auth');
+const { pool } = require('../config/db');
+const { authenticate } = require('../middleware');
 
 // GET /api/training?pet_id=X — list training sessions
-router.get('/', auth, async (req, res) => {
+router.get('/', authenticate, async (req, res) => {
   const { pet_id, completed } = req.query;
   let query = `
     SELECT t.*, p.name AS pet_name
@@ -31,7 +31,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // POST /api/training — log a training session
-router.post('/', auth, async (req, res) => {
+router.post('/', authenticate, async (req, res) => {
   const {
     pet_id, trainer_name, skill,
     session_date, duration_min, notes, completed
@@ -66,7 +66,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // PATCH /api/training/:id/complete — mark a session complete
-router.patch('/:id/complete', auth, async (req, res) => {
+router.patch('/:id/complete', authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE training_sessions SET completed=TRUE
@@ -83,7 +83,7 @@ router.patch('/:id/complete', auth, async (req, res) => {
 });
 
 // PUT /api/training/:id — update a session
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', authenticate, async (req, res) => {
   const { trainer_name, skill, session_date, duration_min, notes, completed } = req.body;
   try {
     const { rows } = await pool.query(
@@ -107,7 +107,7 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // DELETE /api/training/:id
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', authenticate, async (req, res) => {
   try {
     const { rowCount } = await pool.query(
       `DELETE FROM training_sessions WHERE id=$1 AND user_id=$2`,

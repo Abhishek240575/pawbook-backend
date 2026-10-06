@@ -1,8 +1,8 @@
 // routes/reviews.js — Marketplace Product Reviews
 const express = require('express');
 const router  = express.Router();
-const { pool } = require('../db');
-const auth    = require('../middleware/auth');
+const { pool } = require('../config/db');
+const { authenticate } = require('../middleware');
 
 // GET /api/reviews?product_id=X — list reviews + aggregated rating
 router.get('/', async (req, res) => {
@@ -42,7 +42,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/reviews — submit a review (one per user per product)
-router.post('/', auth, async (req, res) => {
+router.post('/', authenticate, async (req, res) => {
   const { product_id, rating, title, body } = req.body;
   if (!product_id || !rating) {
     return res.status(400).json({ error: 'product_id and rating required' });
@@ -68,7 +68,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // PATCH /api/reviews/:id/helpful — increment helpful count
-router.patch('/:id/helpful', auth, async (req, res) => {
+router.patch('/:id/helpful', authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE marketplace_reviews
@@ -86,7 +86,7 @@ router.patch('/:id/helpful', auth, async (req, res) => {
 });
 
 // DELETE /api/reviews/:id — delete own review
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', authenticate, async (req, res) => {
   try {
     const { rowCount } = await pool.query(
       `DELETE FROM marketplace_reviews WHERE id=$1 AND user_id=$2`,
