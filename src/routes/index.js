@@ -1,4 +1,4 @@
-const router = require('express').Router();
+﻿const router = require('express').Router();
 const { body, param, query } = require('express-validator');
 
 const {
@@ -230,7 +230,18 @@ router.get('/health', async (req, res) => {
   }
 });
 // ═══════════════════════════════════════════════════════════════════════════
-// PASTE THIS BLOCK into src/routes/index.js BEFORE module.exports = router;
+// PASTE THIS BLOCK into src/routes/index.js BEFORE 
+// ── NEW FEATURE ROUTES ────────────────────────────────────────────
+router.use('/appointments',  require('./appointments'));
+router.use('/pawmatch',      require('./pawmatch'));
+router.use('/vaccinations',  require('./vaccinations'));
+router.use('/reviews',       require('./reviews'));
+router.use('/notifications', require('./notifications'));
+router.use('/groups-v2',     require('./groups'));
+router.use('/insurance-v2',  require('./insurance'));
+router.use('/training-v2',   require('./training'));
+router.use('/travel',        require('./travel'));
+module.exports = router;
 // ═══════════════════════════════════════════════════════════════════════════
 
 const groupCtrl      = require('../controllers/group.controller');
@@ -323,4 +334,15 @@ trainingRouter.patch('/sessions/:session_id', authenticate, [
   body('status').optional().isIn(['scheduled', 'in_progress', 'completed', 'cancelled']),
 ], validate, analyticsCtrl.updateTrainingProgress);
 router.use('/training', trainingRouter);
+
+// ── NEW FEATURE ROUTES ────────────────────────────────────────────
+router.use('/appointments',  require('./appointments'));
+router.use('/pawmatch',      require('./pawmatch'));
+router.use('/vaccinations',  require('./vaccinations'));
+router.use('/reviews',       require('./reviews'));
+router.use('/notifications', require('./notifications'));
+router.use('/groups-v2',     require('./groups'));
+router.use('/insurance-v2',  require('./insurance'));
+router.use('/training-v2',   require('./training'));
+router.use('/travel',        require('./travel'));
 module.exports = router;
