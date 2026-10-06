@@ -240,5 +240,6 @@ router.use('/notifications', require('./notifications'));
 router.use('/insurance',     require('./insurance'));
 router.use('/training',      require('./training'));
 router.use('/travel',        require('./travel'));
+router.use('/businesses', require('./business.routes'));
 
 module.exports = router;
