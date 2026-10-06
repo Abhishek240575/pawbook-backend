@@ -1,10 +1,10 @@
-const bcrypt = require('bcryptjs');
+﻿const bcrypt = require('bcryptjs');
 const jwt    = require('jsonwebtoken');
 const { query, getClient } = require('../config/db');
 const R      = require('../utils/response');
 const logger = require('../utils/logger');
 
-// ── helpers ───────────────────────────────────────────────────
+// â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const signToken = (user_id, role) =>
   jwt.sign({ user_id, role }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d'
@@ -15,7 +15,7 @@ const signRefresh = (user_id) =>
     expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d'
   });
 
-// ── REGISTER ──────────────────────────────────────────────────
+// â”€â”€ REGISTER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const register = async (req, res, next) => {
   const { username, email, password, full_name, role = 'pet_owner', phone } = req.body;
 
@@ -25,7 +25,7 @@ const register = async (req, res, next) => {
 
     // Check duplicates
     const exists = await client.query(
-      `SELECT user_id FROM "User"
+      `SELECT user_id FROM users
         WHERE email = $1 OR username = $2 LIMIT 1`,
       [email.toLowerCase(), username.toLowerCase()]
     );
@@ -38,7 +38,7 @@ const register = async (req, res, next) => {
     );
 
     const { rows } = await client.query(
-      `INSERT INTO "User"
+      `INSERT INTO users
          (username, email, password_hash, full_name, role, phone, status)
        VALUES ($1, $2, $3, $4, $5, $6, 'pending_verify')
        RETURNING user_id, user_no, username, email, full_name, role, status, created_at`,
@@ -63,14 +63,14 @@ const register = async (req, res, next) => {
   }
 };
 
-// ── LOGIN ─────────────────────────────────────────────────────
+// â”€â”€ LOGIN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const login = async (req, res, next) => {
   const { email, password } = req.body;
   try {
     const { rows } = await query(
       `SELECT user_id, username, email, full_name, password_hash,
               role, status, is_verified, avatar_url, last_login_at
-         FROM "User"
+         FROM users
         WHERE email = $1 AND deleted_at IS NULL`,
       [email.toLowerCase()]
     );
@@ -91,7 +91,7 @@ const login = async (req, res, next) => {
 
     // Update last_login
     await query(
-      `UPDATE "User"
+      `UPDATE users
           SET last_login_at = NOW(), last_login_ip = $2, updated_at = NOW()
         WHERE user_id = $1`,
       [user.user_id, req.ip]
@@ -115,7 +115,7 @@ const login = async (req, res, next) => {
   }
 };
 
-// ── REFRESH TOKEN ─────────────────────────────────────────────
+// â”€â”€ REFRESH TOKEN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const refresh = async (req, res, next) => {
   const { refresh_token } = req.body;
   if (!refresh_token)
@@ -126,7 +126,7 @@ const refresh = async (req, res, next) => {
       return R.unauthorized(res, 'Invalid refresh token');
 
     const { rows } = await query(
-      `SELECT user_id, role, status FROM "User"
+      `SELECT user_id, role, status FROM users
         WHERE user_id = $1 AND deleted_at IS NULL`,
       [payload.user_id]
     );
@@ -143,7 +143,7 @@ const refresh = async (req, res, next) => {
   }
 };
 
-// ── ME (get current user) ─────────────────────────────────────
+// â”€â”€ ME (get current user) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const me = async (req, res, next) => {
   try {
     const { rows } = await query(
@@ -154,7 +154,7 @@ const me = async (req, res, next) => {
               COUNT(DISTINCT f_in.follower_id)  AS follower_count,
               COUNT(DISTINCT f_out.followee_id) AS following_count,
               COUNT(DISTINCT pet.pet_id)        AS pet_count
-         FROM "User" u
+         FROM users u
          LEFT JOIN "Profile" p
                 ON p.user_id = u.user_id
          LEFT JOIN "Follower" f_in
@@ -174,12 +174,12 @@ const me = async (req, res, next) => {
   }
 };
 
-// ── CHANGE PASSWORD ───────────────────────────────────────────
+// â”€â”€ CHANGE PASSWORD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const changePassword = async (req, res, next) => {
   const { current_password, new_password } = req.body;
   try {
     const { rows } = await query(
-      `SELECT password_hash FROM "User" WHERE user_id = $1`,
+      `SELECT password_hash FROM users WHERE user_id = $1`,
       [req.user.user_id]
     );
     const valid = await bcrypt.compare(current_password, rows[0].password_hash);
@@ -190,7 +190,7 @@ const changePassword = async (req, res, next) => {
       parseInt(process.env.BCRYPT_ROUNDS) || 12
     );
     await query(
-      `UPDATE "User" SET password_hash = $1, updated_at = NOW()
+      `UPDATE users SET password_hash = $1, updated_at = NOW()
         WHERE user_id = $2`,
       [hash, req.user.user_id]
     );
@@ -208,3 +208,4 @@ const changePassword = async (req, res, next) => {
 };
 
 module.exports = { register, login, refresh, me, changePassword };
+
