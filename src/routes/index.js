@@ -231,140 +231,14 @@ router.get('/health', async (req, res) => {
 });
 // ═══════════════════════════════════════════════════════════════════════════
 // PASTE THIS BLOCK into src/routes/index.js BEFORE 
-// ── NEW FEATURE ROUTES ────────────────────────────────────────────
+// ── NEW FEATURE ROUTES ──────────────────────────────────────────
 router.use('/appointments',  require('./appointments'));
 router.use('/pawmatch',      require('./pawmatch'));
 router.use('/vaccinations',  require('./vaccinations'));
 router.use('/reviews',       require('./reviews'));
 router.use('/notifications', require('./notifications'));
-router.use('/groups-v2',     require('./groups'));
-router.use('/insurance-v2',  require('./insurance'));
-router.use('/training-v2',   require('./training'));
+router.use('/insurance',     require('./insurance'));
+router.use('/training',      require('./training'));
 router.use('/travel',        require('./travel'));
 
-// ── NEW FEATURE ROUTES ────────────────────────────────────────────
-router.use('/appointments',  require('./appointments'));
-router.use('/pawmatch',      require('./pawmatch'));
-router.use('/vaccinations',  require('./vaccinations'));
-router.use('/reviews',       require('./reviews'));
-router.use('/notifications', require('./notifications'));
-router.use('/groups-v2',     require('./groups'));
-router.use('/insurance-v2',  require('./insurance'));
-router.use('/training-v2',   require('./training'));
-router.use('/travel',        require('./travel'));
-module.exports = router;
-// ═══════════════════════════════════════════════════════════════════════════
-
-const groupCtrl      = require('../controllers/group.controller');
-const lostPetCtrl    = require('../controllers/lost_pet.controller');
-const marketCtrl     = require('../controllers/marketplace.controller');
-const analyticsCtrl  = require('../controllers/analytics.controller');
-
-// ── GROUPS ──────────────────────────────────────────────────────────────────
-const groupRouter = require('express').Router();
-
-groupRouter.get('/',    parsePagination, authenticate, groupCtrl.getGroups);
-groupRouter.post('/',   authenticate, [
-  body('name').trim().isLength({ min: 2, max: 100 }),
-], validate, groupCtrl.createGroup);
-
-groupRouter.get('/:group_id',              authenticate, groupCtrl.getGroup);
-groupRouter.post('/:group_id/join',        authenticate, groupCtrl.joinGroup);
-groupRouter.get('/:group_id/posts',        authenticate, parsePagination, groupCtrl.getGroupFeed);
-groupRouter.post('/:group_id/posts',       authenticate, [
-  body('body').optional().isLength({ max: 5000 }),
-], validate, groupCtrl.postInGroup);
-groupRouter.get('/:group_id/members',      authenticate, parsePagination, groupCtrl.getGroupMembers);
-
-router.use('/groups', groupRouter);
-
-// ── LOST PET ─────────────────────────────────────────────────────────────────
-const lostRouter = require('express').Router();
-
-lostRouter.get('/',                         parsePagination, lostPetCtrl.getAlerts);
-lostRouter.post('/',  authenticate, [
-  body('pet_id').isUUID(),
-], validate, lostPetCtrl.reportLostPet);
-lostRouter.get('/:alert_id',                lostPetCtrl.getAlert);
-lostRouter.post('/:alert_id/sightings',     authenticate, [
-  body('description').optional().isLength({ max: 1000 }),
-], validate, lostPetCtrl.reportSighting);
-lostRouter.patch('/:alert_id',  authenticate, [
-  body('status').isIn(['active', 'found', 'closed']),
-], validate, lostPetCtrl.updateAlert);
-
-router.use('/lost-pets', lostRouter);
-
-// ── MARKETPLACE ───────────────────────────────────────────────────────────────
-const marketRouter = require('express').Router();
-
-marketRouter.get('/products',                parsePagination, marketCtrl.getProducts);
-marketRouter.get('/products/:product_id',    marketCtrl.getProduct);
-
-marketRouter.get('/cart',                    authenticate, marketCtrl.getCart);
-marketRouter.post('/cart', authenticate, [
-  body('product_id').isUUID(),
-  body('quantity').optional().isInt({ min: 1 }),
-], validate, marketCtrl.addToCart);
-marketRouter.patch('/cart/:cart_id',         authenticate, [
-  body('quantity').isInt({ min: 1 }),
-], validate, marketCtrl.updateCartItem);
-marketRouter.delete('/cart/:cart_id',        authenticate, marketCtrl.removeFromCart);
-
-marketRouter.post('/orders', authenticate, [
-  body('delivery_address').notEmpty(),
-  body('payment_method').optional().isIn(['cod', 'upi', 'card', 'netbanking']),
-], validate, marketCtrl.placeOrder);
-marketRouter.get('/orders',                  authenticate, parsePagination, marketCtrl.getMyOrders);
-marketRouter.get('/orders/:order_id',        authenticate, marketCtrl.getOrder);
-
-router.use('/marketplace', marketRouter);
-
-// ── ANALYTICS ─────────────────────────────────────────────────────────────────
-router.get('/analytics/me', authenticate, analyticsCtrl.getMyAnalytics);
-
-// ── INSURANCE ─────────────────────────────────────────────────────────────────
-const insuranceRouter = require('express').Router();
-insuranceRouter.post('/enroll', authenticate, [
-  body('pet_id').isUUID(),
-  body('plan_type').isIn(['basic', 'premium', 'elite']),
-  body('plan_name').notEmpty(),
-  body('premium_inr').isFloat({ min: 0 }),
-], validate, analyticsCtrl.enrollInsurance);
-insuranceRouter.get('/my-plan', authenticate, analyticsCtrl.getMyInsurance);
-router.use('/insurance', insuranceRouter);
-
-// ── TRAINING ──────────────────────────────────────────────────────────────────
-const trainingRouter = require('express').Router();
-trainingRouter.post('/sessions', authenticate, [
-  body('pet_id').isUUID(),
-  body('scheduled_at').isISO8601(),
-], validate, analyticsCtrl.bookTrainingSession);
-trainingRouter.get('/sessions/mine', authenticate, parsePagination, analyticsCtrl.getMyTrainingSessions);
-trainingRouter.patch('/sessions/:session_id', authenticate, [
-  body('status').optional().isIn(['scheduled', 'in_progress', 'completed', 'cancelled']),
-], validate, analyticsCtrl.updateTrainingProgress);
-router.use('/training', trainingRouter);
-
-// ── NEW FEATURE ROUTES ────────────────────────────────────────────
-router.use('/appointments',  require('./appointments'));
-router.use('/pawmatch',      require('./pawmatch'));
-router.use('/vaccinations',  require('./vaccinations'));
-router.use('/reviews',       require('./reviews'));
-router.use('/notifications', require('./notifications'));
-router.use('/groups-v2',     require('./groups'));
-router.use('/insurance-v2',  require('./insurance'));
-router.use('/training-v2',   require('./training'));
-router.use('/travel',        require('./travel'));
-
-// ── NEW FEATURE ROUTES ────────────────────────────────────────────
-router.use('/appointments',  require('./appointments'));
-router.use('/pawmatch',      require('./pawmatch'));
-router.use('/vaccinations',  require('./vaccinations'));
-router.use('/reviews',       require('./reviews'));
-router.use('/notifications', require('./notifications'));
-router.use('/groups-v2',     require('./groups'));
-router.use('/insurance-v2',  require('./insurance'));
-router.use('/training-v2',   require('./training'));
-router.use('/travel',        require('./travel'));
 module.exports = router;
