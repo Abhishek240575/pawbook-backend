@@ -204,16 +204,67 @@ router.post('/invites/:invite_id/respond', authenticate, [
 // ── MESSAGES ─────────────────────────────────────────────────────────────────
 const msgCtrl = require('../controllers/message.controller');
 
-router.get('/conversations',                authenticate, msgCtrl.getConversations);
-router.post('/conversations',               authenticate, [
+// Users directory
+router.get('/messages/users',         authenticate, msgCtrl.getAllUsers);
+router.get('/messages/search-users',  authenticate, msgCtrl.searchUsers);
+
+// 1-to-1 conversations
+router.get('/conversations',          authenticate, msgCtrl.getConversations);
+router.post('/conversations',         authenticate, [
   body('other_user_id').isUUID(),
 ], validate, msgCtrl.startConversation);
-router.get('/conversations/:id/messages',   authenticate, msgCtrl.getMessages);
-router.post('/conversations/:id/messages',  authenticate, [
+router.get('/conversations/:id/messages',                  authenticate, msgCtrl.getMessages);
+router.post('/conversations/:id/messages',                 authenticate, [
   body('content').trim().notEmpty(),
 ], validate, msgCtrl.sendMessage);
-router.patch('/conversations/:id/read',     authenticate, msgCtrl.markRead);
-router.get('/messages/search-users',        authenticate, msgCtrl.searchUsers);
+router.patch('/conversations/:id/messages/:msg_id',        authenticate, [
+  param('msg_id').isUUID(),
+  body('content').trim().notEmpty(),
+], validate, msgCtrl.editMessage);
+router.delete('/conversations/:id/messages/:msg_id',       authenticate, [
+  param('msg_id').isUUID(),
+], validate, msgCtrl.deleteMessage);
+router.post('/conversations/:id/messages/:msg_id/revoke',  authenticate, [
+  param('msg_id').isUUID(),
+], validate, msgCtrl.revokeMessage);
+router.patch('/conversations/:id/read',                    authenticate, msgCtrl.markRead);
+
+// Group conversations (chat groups)
+router.get('/group-conversations',                         authenticate, msgCtrl.getGroupConversations);
+router.post('/group-conversations',                        authenticate, [
+  body('name').trim().isLength({ min: 1, max: 100 }),
+  body('member_ids').optional().isArray(),
+], validate, msgCtrl.createGroupConversation);
+router.post('/group-conversations/:group_conv_id/members', authenticate, [
+  body('member_ids').isArray({ min: 1 }),
+], validate, msgCtrl.addGroupMembers);
+router.get('/group-conversations/:group_conv_id/messages',         authenticate, msgCtrl.getGroupMessages);
+router.post('/group-conversations/:group_conv_id/messages',        authenticate, [
+  body('content').trim().notEmpty(),
+], validate, msgCtrl.sendGroupMessage);
+router.patch('/group-conversations/:group_conv_id/messages/:msg_id',       authenticate, [
+  param('msg_id').isUUID(),
+  body('content').trim().notEmpty(),
+], validate, msgCtrl.editGroupMessage);
+router.delete('/group-conversations/:group_conv_id/messages/:msg_id',      authenticate, [
+  param('msg_id').isUUID(),
+], validate, msgCtrl.deleteGroupMessage);
+router.post('/group-conversations/:group_conv_id/messages/:msg_id/revoke', authenticate, [
+  param('msg_id').isUUID(),
+], validate, msgCtrl.revokeGroupMessage);
+
+// Broadcasts (message to all users)
+router.get('/broadcasts',                    authenticate, msgCtrl.getBroadcasts);
+router.post('/broadcasts',                   authenticate, [
+  body('content').trim().notEmpty(),
+], validate, msgCtrl.sendBroadcast);
+router.patch('/broadcasts/:broadcast_id',    authenticate, [
+  param('broadcast_id').isUUID(),
+  body('content').trim().notEmpty(),
+], validate, msgCtrl.editBroadcast);
+router.post('/broadcasts/:broadcast_id/revoke', authenticate, [
+  param('broadcast_id').isUUID(),
+], validate, msgCtrl.revokeBroadcast);
 
 // ── SEARCH ────────────────────────────────────────────────────
 router.get('/search', authenticate, async (req, res, next) => {
@@ -227,7 +278,6 @@ router.get('/search', authenticate, async (req, res, next) => {
       `SELECT * FROM fn_search($1, $2)`,
       [q.trim(), category]
     );
-    // Log search
     await dbQuery(
       `INSERT INTO "SearchHistory" (user_id, query, category, result_count)
        VALUES ($1, $2, $3, $4)`,
@@ -253,15 +303,12 @@ router.get('/notifications', authenticate, parsePagination, async (req, res, nex
       [req.user.user_id, limit, offset]
     );
     const { rows: [{ total }] } = await dbQuery(
-      `SELECT COUNT(*) AS total FROM "Notification"
-        WHERE recipient_id = $1`,
+      `SELECT COUNT(*) AS total FROM "Notification" WHERE recipient_id = $1`,
       [req.user.user_id]
     );
-    // Mark all as read
     await dbQuery(
-      `UPDATE "Notification"
-          SET is_read = TRUE, read_at = NOW()
-        WHERE recipient_id = $1 AND is_read = FALSE`,
+      `UPDATE "Notification" SET is_read=TRUE, read_at=NOW()
+        WHERE recipient_id=$1 AND is_read=FALSE`,
       [req.user.user_id]
     );
     const R = require('../utils/response');
@@ -274,12 +321,7 @@ router.get('/health', async (req, res) => {
   const { pool } = require('../config/db');
   try {
     await pool.query('SELECT 1');
-    res.json({
-      success: true,
-      message: 'PawBook API is healthy',
-      db: 'connected',
-      timestamp: new Date().toISOString()
-    });
+    res.json({ success: true, message: 'PawBook API is healthy', db: 'connected', timestamp: new Date().toISOString() });
   } catch {
     res.status(503).json({ success: false, message: 'DB unavailable' });
   }
@@ -294,7 +336,7 @@ router.use('/notifications', require('./notifications'));
 router.use('/insurance',     require('./insurance'));
 router.use('/training',      require('./training'));
 router.use('/travel',        require('./travel'));
-router.use('/businesses', require('./business.routes'));
-router.use('/overpass', require('./overpass.routes'));
+router.use('/businesses',    require('./business.routes'));
+router.use('/overpass',      require('./overpass.routes'));
 
 module.exports = router;
