@@ -325,7 +325,6 @@ exports.getBroadcasts = async (req, res, next) => {
               u.full_name AS sender_name, u.avatar_url AS sender_avatar
          FROM broadcasts b
          JOIN users u ON u.user_id=b.sender_id
-        WHERE b.deleted_at IS NULL
         ORDER BY b.created_at DESC
         LIMIT 50`
     );
@@ -351,8 +350,9 @@ exports.editBroadcast = async (req, res, next) => {
   try {
     const { rows } = await query(
       `UPDATE broadcasts
-          SET content=$1, edited_at=NOW()
-        WHERE broadcast_id=$2 AND sender_id=$3 AND is_revoked=FALSE AND deleted_at IS NULL
+          SET original_content=COALESCE(original_content,content),
+              content=$1, edited_at=NOW()
+        WHERE broadcast_id=$2 AND sender_id=$3 AND is_revoked=FALSE
        RETURNING broadcast_id`,
       [content, broadcast_id, req.user.user_id]
     );
