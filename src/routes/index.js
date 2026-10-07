@@ -1,4 +1,4 @@
-const router = require('express').Router();
+﻿const router = require('express').Router();
 const { body, param, query } = require('express-validator');
 
 const {
@@ -160,112 +160,6 @@ vetRouter.post('/appointments/:appointment_id/rate',
 
 router.use('/vets', vetRouter);
 
-// ── GROUPS ──────────────────────────────────────────────────────────────────
-const groupRouter = require('express').Router();
-const groupCtrl   = require('../controllers/group.controller');
-
-groupRouter.get('/',    authenticate, parsePagination, groupCtrl.getGroups);
-groupRouter.post('/',   authenticate, [
-  body('name').trim().isLength({ min: 2, max: 100 }),
-  body('group_type').optional().isIn(['public','private']),
-  body('category').optional().trim(),
-  body('city').optional().trim(),
-], validate, groupCtrl.createGroup);
-
-groupRouter.get('/:group_id',              authenticate, groupCtrl.getGroup);
-groupRouter.post('/:group_id/join',        authenticate, [
-  body('pet_name').optional().trim(),
-  body('pet_type').optional().trim(),
-  body('city').optional().trim(),
-  body('why_joining').optional().isLength({ max: 1000 }),
-  body('years_as_owner').optional().isInt({ min: 0 }),
-], validate, groupCtrl.joinGroup);
-groupRouter.post('/:group_id/leave',       authenticate, groupCtrl.leaveGroup);
-groupRouter.get('/:group_id/posts',        authenticate, parsePagination, groupCtrl.getGroupFeed);
-groupRouter.post('/:group_id/posts',       authenticate, [
-  body('body').optional().isLength({ max: 5000 }),
-], validate, groupCtrl.postInGroup);
-groupRouter.get('/:group_id/members',      authenticate, parsePagination, groupCtrl.getGroupMembers);
-groupRouter.get('/:group_id/requests',     authenticate, parsePagination, groupCtrl.getJoinRequests);
-groupRouter.post('/:group_id/requests/:request_id', authenticate, [
-  body('action').isIn(['approve','reject']),
-], validate, groupCtrl.reviewJoinRequest);
-groupRouter.post('/:group_id/invite',      authenticate, [
-  body('invitee_id').isUUID(),
-], validate, groupCtrl.inviteToGroup);
-
-router.use('/groups', groupRouter);
-
-// ── GROUP INVITES ────────────────────────────────────────────────────────────
-router.post('/invites/:invite_id/respond', authenticate, [
-  body('action').isIn(['accept','decline']),
-], validate, groupCtrl.respondToInvite);
-
-// ── MESSAGES ─────────────────────────────────────────────────────────────────
-const msgCtrl = require('../controllers/message.controller');
-
-// Users directory
-router.get('/messages/users',         authenticate, msgCtrl.getAllUsers);
-router.get('/messages/search-users',  authenticate, msgCtrl.searchUsers);
-
-// 1-to-1 conversations
-router.get('/conversations',          authenticate, msgCtrl.getConversations);
-router.post('/conversations',         authenticate, [
-  body('other_user_id').isUUID(),
-], validate, msgCtrl.startConversation);
-router.get('/conversations/:id/messages',                  authenticate, msgCtrl.getMessages);
-router.post('/conversations/:id/messages',                 authenticate, [
-  body('content').trim().notEmpty(),
-], validate, msgCtrl.sendMessage);
-router.patch('/conversations/:id/messages/:msg_id',        authenticate, [
-  param('msg_id').isUUID(),
-  body('content').trim().notEmpty(),
-], validate, msgCtrl.editMessage);
-router.delete('/conversations/:id/messages/:msg_id',       authenticate, [
-  param('msg_id').isUUID(),
-], validate, msgCtrl.deleteMessage);
-router.post('/conversations/:id/messages/:msg_id/revoke',  authenticate, [
-  param('msg_id').isUUID(),
-], validate, msgCtrl.revokeMessage);
-router.patch('/conversations/:id/read',                    authenticate, msgCtrl.markRead);
-
-// Group conversations (chat groups)
-router.get('/group-conversations',                         authenticate, msgCtrl.getGroupConversations);
-router.post('/group-conversations',                        authenticate, [
-  body('name').trim().isLength({ min: 1, max: 100 }),
-  body('member_ids').optional().isArray(),
-], validate, msgCtrl.createGroupConversation);
-router.post('/group-conversations/:group_conv_id/members', authenticate, [
-  body('member_ids').isArray({ min: 1 }),
-], validate, msgCtrl.addGroupMembers);
-router.get('/group-conversations/:group_conv_id/messages',         authenticate, msgCtrl.getGroupMessages);
-router.post('/group-conversations/:group_conv_id/messages',        authenticate, [
-  body('content').trim().notEmpty(),
-], validate, msgCtrl.sendGroupMessage);
-router.patch('/group-conversations/:group_conv_id/messages/:msg_id',       authenticate, [
-  param('msg_id').isUUID(),
-  body('content').trim().notEmpty(),
-], validate, msgCtrl.editGroupMessage);
-router.delete('/group-conversations/:group_conv_id/messages/:msg_id',      authenticate, [
-  param('msg_id').isUUID(),
-], validate, msgCtrl.deleteGroupMessage);
-router.post('/group-conversations/:group_conv_id/messages/:msg_id/revoke', authenticate, [
-  param('msg_id').isUUID(),
-], validate, msgCtrl.revokeGroupMessage);
-
-// Broadcasts (message to all users)
-router.get('/broadcasts',                    authenticate, msgCtrl.getBroadcasts);
-router.post('/broadcasts',                   authenticate, [
-  body('content').trim().notEmpty(),
-], validate, msgCtrl.sendBroadcast);
-router.patch('/broadcasts/:broadcast_id',    authenticate, [
-  param('broadcast_id').isUUID(),
-  body('content').trim().notEmpty(),
-], validate, msgCtrl.editBroadcast);
-router.post('/broadcasts/:broadcast_id/revoke', authenticate, [
-  param('broadcast_id').isUUID(),
-], validate, msgCtrl.revokeBroadcast);
-
 // ── SEARCH ────────────────────────────────────────────────────
 router.get('/search', authenticate, async (req, res, next) => {
   const { q, category = 'all' } = req.query;
@@ -278,6 +172,7 @@ router.get('/search', authenticate, async (req, res, next) => {
       `SELECT * FROM fn_search($1, $2)`,
       [q.trim(), category]
     );
+    // Log search
     await dbQuery(
       `INSERT INTO "SearchHistory" (user_id, query, category, result_count)
        VALUES ($1, $2, $3, $4)`,
@@ -296,19 +191,22 @@ router.get('/notifications', authenticate, parsePagination, async (req, res, nex
       `SELECT n.*,
               u.username AS sender_username, u.avatar_url AS sender_avatar
          FROM "Notification" n
-         LEFT JOIN users u ON u.user_id = n.sender_id
+         LEFT JOIN "User" u ON u.user_id = n.sender_id
         WHERE n.recipient_id = $1
         ORDER BY n.created_at DESC
         LIMIT $2 OFFSET $3`,
       [req.user.user_id, limit, offset]
     );
     const { rows: [{ total }] } = await dbQuery(
-      `SELECT COUNT(*) AS total FROM "Notification" WHERE recipient_id = $1`,
+      `SELECT COUNT(*) AS total FROM "Notification"
+        WHERE recipient_id = $1`,
       [req.user.user_id]
     );
+    // Mark all as read
     await dbQuery(
-      `UPDATE "Notification" SET is_read=TRUE, read_at=NOW()
-        WHERE recipient_id=$1 AND is_read=FALSE`,
+      `UPDATE "Notification"
+          SET is_read = TRUE, read_at = NOW()
+        WHERE recipient_id = $1 AND is_read = FALSE`,
       [req.user.user_id]
     );
     const R = require('../utils/response');
@@ -321,12 +219,18 @@ router.get('/health', async (req, res) => {
   const { pool } = require('../config/db');
   try {
     await pool.query('SELECT 1');
-    res.json({ success: true, message: 'PawBook API is healthy', db: 'connected', timestamp: new Date().toISOString() });
+    res.json({
+      success: true,
+      message: 'PawBook API is healthy',
+      db: 'connected',
+      timestamp: new Date().toISOString()
+    });
   } catch {
     res.status(503).json({ success: false, message: 'DB unavailable' });
   }
 });
-
+// ═══════════════════════════════════════════════════════════════════════════
+// PASTE THIS BLOCK into src/routes/index.js BEFORE 
 // ── NEW FEATURE ROUTES ──────────────────────────────────────────
 router.use('/appointments',  require('./appointments'));
 router.use('/pawmatch',      require('./pawmatch'));
@@ -336,7 +240,63 @@ router.use('/notifications', require('./notifications'));
 router.use('/insurance',     require('./insurance'));
 router.use('/training',      require('./training'));
 router.use('/travel',        require('./travel'));
-router.use('/businesses',    require('./business.routes'));
-router.use('/overpass',      require('./overpass.routes'));
+router.use('/businesses', require('./business.routes'));
+router.use('/overpass', require('./overpass.routes'));
+// ── MESSAGES (DM + Group + Broadcast) ────────────────────────────────────────
+const msgCtrl = require('../controllers/message.controller');
+
+// People list & search
+router.get('/messages/users',        authenticate, msgCtrl.getUsers);
+router.get('/messages/search-users', authenticate, msgCtrl.searchUsers);
+
+// DM Conversations
+const convRouter = require('express').Router();
+convRouter.get('/',                             authenticate, parsePagination, msgCtrl.getConversations);
+convRouter.post('/', authenticate, [
+  body('other_user_id').isUUID(),
+], validate, msgCtrl.getOrCreateConversation);
+convRouter.get('/:conversation_id/messages',    authenticate, parsePagination, msgCtrl.getDMMessages);
+convRouter.post('/:conversation_id/messages', authenticate, [
+  body('content').trim().isLength({ min:1, max:5000 }),
+], validate, msgCtrl.sendDM);
+convRouter.patch('/:conversation_id/messages/:message_id', authenticate, [
+  body('content').trim().isLength({ min:1, max:5000 }),
+], validate, msgCtrl.editDM);
+convRouter.delete('/:conversation_id/messages/:message_id', authenticate, msgCtrl.deleteDM);
+convRouter.post('/:conversation_id/messages/:message_id/revoke', authenticate, msgCtrl.revokeDM);
+router.use('/conversations', convRouter);
+
+// Group Conversations
+const gcRouter = require('express').Router();
+gcRouter.get('/',    authenticate, msgCtrl.getGroupConvs);
+gcRouter.post('/', authenticate, [
+  body('name').trim().isLength({ min:1, max:100 }),
+  body('member_ids').isArray({ min:1 }),
+], validate, msgCtrl.createGroupConv);
+gcRouter.get('/:group_conv_id/messages',  authenticate, parsePagination, msgCtrl.getGroupMessages);
+gcRouter.post('/:group_conv_id/messages', authenticate, [
+  body('content').trim().isLength({ min:1, max:5000 }),
+], validate, msgCtrl.sendGroupMessage);
+gcRouter.patch('/:group_conv_id/messages/:message_id', authenticate, [
+  body('content').trim().isLength({ min:1, max:5000 }),
+], validate, msgCtrl.editGroupMessage);
+gcRouter.delete('/:group_conv_id/messages/:message_id', authenticate, msgCtrl.deleteGroupMessage);
+gcRouter.post('/:group_conv_id/messages/:message_id/revoke', authenticate, msgCtrl.revokeGroupMessage);
+gcRouter.post('/:group_conv_id/members', authenticate, [
+  body('member_ids').isArray({ min:1 }),
+], validate, msgCtrl.addGroupMembers);
+router.use('/group-conversations', gcRouter);
+
+// Broadcasts
+const bcRouter = require('express').Router();
+bcRouter.get('/',    authenticate, parsePagination, msgCtrl.getBroadcasts);
+bcRouter.post('/', authenticate, [
+  body('content').trim().isLength({ min:1, max:5000 }),
+], validate, msgCtrl.sendBroadcast);
+bcRouter.patch('/:broadcast_id', authenticate, [
+  body('content').trim().isLength({ min:1, max:5000 }),
+], validate, msgCtrl.editBroadcast);
+bcRouter.post('/:broadcast_id/revoke', authenticate, msgCtrl.revokeBroadcast);
+router.use('/broadcasts', bcRouter);
 
 module.exports = router;
