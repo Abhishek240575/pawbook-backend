@@ -1,4 +1,4 @@
-const pool = require('../db');
+const pool = require('../config/db');
 const R = require('../utils/response');
 
 // GET /events — list all active events
