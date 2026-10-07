@@ -1,4 +1,4 @@
-﻿const router = require('express').Router();
+const router = require('express').Router();
 const { body, param, query } = require('express-validator');
 
 const {
@@ -160,6 +160,47 @@ vetRouter.post('/appointments/:appointment_id/rate',
 
 router.use('/vets', vetRouter);
 
+// ── GROUPS ──────────────────────────────────────────────────────────────────
+const groupRouter = require('express').Router();
+const groupCtrl   = require('../controllers/group.controller');
+
+groupRouter.get('/',    authenticate, parsePagination, groupCtrl.getGroups);
+groupRouter.post('/',   authenticate, [
+  body('name').trim().isLength({ min: 2, max: 100 }),
+  body('group_type').optional().isIn(['public','private']),
+  body('category').optional().trim(),
+  body('city').optional().trim(),
+], validate, groupCtrl.createGroup);
+
+groupRouter.get('/:group_id',              authenticate, groupCtrl.getGroup);
+groupRouter.post('/:group_id/join',        authenticate, [
+  body('pet_name').optional().trim(),
+  body('pet_type').optional().trim(),
+  body('city').optional().trim(),
+  body('why_joining').optional().isLength({ max: 1000 }),
+  body('years_as_owner').optional().isInt({ min: 0 }),
+], validate, groupCtrl.joinGroup);
+groupRouter.post('/:group_id/leave',       authenticate, groupCtrl.leaveGroup);
+groupRouter.get('/:group_id/posts',        authenticate, parsePagination, groupCtrl.getGroupFeed);
+groupRouter.post('/:group_id/posts',       authenticate, [
+  body('body').optional().isLength({ max: 5000 }),
+], validate, groupCtrl.postInGroup);
+groupRouter.get('/:group_id/members',      authenticate, parsePagination, groupCtrl.getGroupMembers);
+groupRouter.get('/:group_id/requests',     authenticate, parsePagination, groupCtrl.getJoinRequests);
+groupRouter.post('/:group_id/requests/:request_id', authenticate, [
+  body('action').isIn(['approve','reject']),
+], validate, groupCtrl.reviewJoinRequest);
+groupRouter.post('/:group_id/invite',      authenticate, [
+  body('invitee_id').isUUID(),
+], validate, groupCtrl.inviteToGroup);
+
+router.use('/groups', groupRouter);
+
+// ── GROUP INVITES ────────────────────────────────────────────────────────────
+router.post('/invites/:invite_id/respond', authenticate, [
+  body('action').isIn(['accept','decline']),
+], validate, groupCtrl.respondToInvite);
+
 // ── SEARCH ────────────────────────────────────────────────────
 router.get('/search', authenticate, async (req, res, next) => {
   const { q, category = 'all' } = req.query;
@@ -191,7 +232,7 @@ router.get('/notifications', authenticate, parsePagination, async (req, res, nex
       `SELECT n.*,
               u.username AS sender_username, u.avatar_url AS sender_avatar
          FROM "Notification" n
-         LEFT JOIN "User" u ON u.user_id = n.sender_id
+         LEFT JOIN users u ON u.user_id = n.sender_id
         WHERE n.recipient_id = $1
         ORDER BY n.created_at DESC
         LIMIT $2 OFFSET $3`,
@@ -229,8 +270,7 @@ router.get('/health', async (req, res) => {
     res.status(503).json({ success: false, message: 'DB unavailable' });
   }
 });
-// ═══════════════════════════════════════════════════════════════════════════
-// PASTE THIS BLOCK into src/routes/index.js BEFORE 
+
 // ── NEW FEATURE ROUTES ──────────────────────────────────────────
 router.use('/appointments',  require('./appointments'));
 router.use('/pawmatch',      require('./pawmatch'));
