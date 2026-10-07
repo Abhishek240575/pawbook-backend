@@ -21,7 +21,7 @@ const authenticate = async (req, res, next) => {
     // Verify user still exists and is active
     const { rows } = await query(
       `SELECT user_id, username, role, status, is_verified
-         FROM "User"
+         FROM "users"
         WHERE user_id = $1 AND deleted_at IS NULL`,
       [payload.user_id]
     );
