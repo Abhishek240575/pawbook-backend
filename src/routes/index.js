@@ -201,6 +201,20 @@ router.post('/invites/:invite_id/respond', authenticate, [
   body('action').isIn(['accept','decline']),
 ], validate, groupCtrl.respondToInvite);
 
+// ── MESSAGES ─────────────────────────────────────────────────────────────────
+const msgCtrl = require('../controllers/message.controller');
+
+router.get('/conversations',                authenticate, msgCtrl.getConversations);
+router.post('/conversations',               authenticate, [
+  body('other_user_id').isUUID(),
+], validate, msgCtrl.startConversation);
+router.get('/conversations/:id/messages',   authenticate, msgCtrl.getMessages);
+router.post('/conversations/:id/messages',  authenticate, [
+  body('content').trim().notEmpty(),
+], validate, msgCtrl.sendMessage);
+router.patch('/conversations/:id/read',     authenticate, msgCtrl.markRead);
+router.get('/messages/search-users',        authenticate, msgCtrl.searchUsers);
+
 // ── SEARCH ────────────────────────────────────────────────────
 router.get('/search', authenticate, async (req, res, next) => {
   const { q, category = 'all' } = req.query;
