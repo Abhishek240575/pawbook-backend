@@ -22,7 +22,7 @@ function postToOverpass(url, body, timeoutMs) {
       path: parsed.pathname,
       method: 'POST',
       headers: {
-        'Content-Type': 'text/plain',
+        'Content-Type': 'application/x-www-form-urlencoded',
         'Content-Length': postData.length,
         'User-Agent': 'PawBook/1.0 (pawbook-api-cquc.onrender.com)'
       }
@@ -57,7 +57,7 @@ router.post('/', async function(req, res) {
   let lastErr = null;
   for(const mirror of MIRRORS) {
     try {
-      const data = await postToOverpass(mirror, query, 30000);
+      const data = await postToOverpass(mirror, 'data=' + encodeURIComponent(query), 30000);
       return res.json(data);
     } catch(err) {
       lastErr = err;
