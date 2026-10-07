@@ -298,5 +298,10 @@ bcRouter.patch('/:broadcast_id', authenticate, [
 ], validate, msgCtrl.editBroadcast);
 bcRouter.post('/:broadcast_id/revoke', authenticate, msgCtrl.revokeBroadcast);
 router.use('/broadcasts', bcRouter);
-
+const evtCtrl = require('../controllers/event.controller');
+router.get('/events', authenticate, evtCtrl.getEvents);
+router.get('/events/:id', authenticate, evtCtrl.getEvent);
+router.post('/events', authenticate, evtCtrl.createEvent);
+router.post('/events/:id/rsvp', authenticate, evtCtrl.rsvpEvent);
+router.delete('/events/:id', authenticate, evtCtrl.deleteEvent);
 module.exports = router;
