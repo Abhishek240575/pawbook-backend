@@ -13,7 +13,7 @@ exports.getUsers = async (req, res, next) => {
         LIMIT 100`,
       [req.user.user_id]
     );
-    return R.success(res, rows);
+    return R.ok(res, rows);
   } catch (err) { next(err); }
 };
 
@@ -32,7 +32,7 @@ exports.searchUsers = async (req, res, next) => {
         LIMIT 20`,
       [req.user.user_id, `%${q}%`]
     );
-    return R.success(res, rows);
+    return R.ok(res, rows);
   } catch (err) { next(err); }
 };
 
@@ -57,7 +57,7 @@ exports.getConversations = async (req, res, next) => {
         ORDER BY COALESCE(c.last_message_at, c.created_at) DESC`,
       [req.user.user_id]
     );
-    return R.success(res, rows);
+    return R.ok(res, rows);
   } catch (err) { next(err); }
 };
 
@@ -77,7 +77,7 @@ exports.getOrCreateConversation = async (req, res, next) => {
       );
       rows = ins.rows;
     }
-    return R.success(res, rows[0]);
+    return R.ok(res, rows[0]);
   } catch (err) { next(err); }
 };
 
@@ -101,7 +101,7 @@ exports.getDMMessages = async (req, res, next) => {
         WHERE conversation_id=$1 AND sender_id!=$2 AND is_read=FALSE`,
       [conversation_id, req.user.user_id]
     );
-    return R.success(res, rows);
+    return R.ok(res, rows);
   } catch (err) { next(err); }
 };
 
@@ -138,7 +138,7 @@ exports.editDM = async (req, res, next) => {
       [content, message_id, conversation_id, req.user.user_id]
     );
     if (!rows.length) return R.forbidden(res, 'Cannot edit this message');
-    return R.success(res, rows[0]);
+    return R.ok(res, rows[0]);
   } catch (err) { next(err); }
 };
 
@@ -152,7 +152,7 @@ exports.deleteDM = async (req, res, next) => {
       [message_id, conversation_id, req.user.user_id]
     );
     if (!rows.length) return R.forbidden(res, 'Cannot delete this message');
-    return R.success(res, { deleted: true });
+    return R.ok(res, { deleted: true });
   } catch (err) { next(err); }
 };
 
@@ -167,7 +167,7 @@ exports.revokeDM = async (req, res, next) => {
       [message_id, conversation_id, req.user.user_id]
     );
     if (!rows.length) return R.forbidden(res, 'Cannot revoke — too old or not yours');
-    return R.success(res, { revoked: true });
+    return R.ok(res, { revoked: true });
   } catch (err) { next(err); }
 };
 
@@ -185,7 +185,7 @@ exports.getGroupConvs = async (req, res, next) => {
         ORDER BY COALESCE(gc.last_message_at, gc.created_at) DESC`,
       [req.user.user_id]
     );
-    return R.success(res, rows);
+    return R.ok(res, rows);
   } catch (err) { next(err); }
 };
 
@@ -229,7 +229,7 @@ exports.getGroupMessages = async (req, res, next) => {
         WHERE group_conv_id=$1 AND sender_id!=$2 AND is_read=FALSE`,
       [group_conv_id, req.user.user_id]
     );
-    return R.success(res, rows);
+    return R.ok(res, rows);
   } catch (err) { next(err); }
 };
 
@@ -266,7 +266,7 @@ exports.editGroupMessage = async (req, res, next) => {
       [content, message_id, group_conv_id, req.user.user_id]
     );
     if (!rows.length) return R.forbidden(res, 'Cannot edit this message');
-    return R.success(res, rows[0]);
+    return R.ok(res, rows[0]);
   } catch (err) { next(err); }
 };
 
@@ -280,7 +280,7 @@ exports.deleteGroupMessage = async (req, res, next) => {
       [message_id, group_conv_id, req.user.user_id]
     );
     if (!rows.length) return R.forbidden(res, 'Cannot delete this message');
-    return R.success(res, { deleted: true });
+    return R.ok(res, { deleted: true });
   } catch (err) { next(err); }
 };
 
@@ -295,7 +295,7 @@ exports.revokeGroupMessage = async (req, res, next) => {
       [message_id, group_conv_id, req.user.user_id]
     );
     if (!rows.length) return R.forbidden(res, 'Cannot revoke — too old or not yours');
-    return R.success(res, { revoked: true });
+    return R.ok(res, { revoked: true });
   } catch (err) { next(err); }
 };
 
@@ -311,7 +311,7 @@ exports.addGroupMembers = async (req, res, next) => {
       );
       added += r.rowCount;
     }
-    return R.success(res, { added });
+    return R.ok(res, { added });
   } catch (err) { next(err); }
 };
 
@@ -328,7 +328,7 @@ exports.getBroadcasts = async (req, res, next) => {
         ORDER BY b.created_at DESC
         LIMIT 50`
     );
-    return R.success(res, rows);
+    return R.ok(res, rows);
   } catch (err) { next(err); }
 };
 
@@ -357,7 +357,7 @@ exports.editBroadcast = async (req, res, next) => {
       [content, broadcast_id, req.user.user_id]
     );
     if (!rows.length) return R.forbidden(res, 'Cannot edit this broadcast');
-    return R.success(res, rows[0]);
+    return R.ok(res, rows[0]);
   } catch (err) { next(err); }
 };
 
@@ -371,6 +371,6 @@ exports.revokeBroadcast = async (req, res, next) => {
       [broadcast_id, req.user.user_id]
     );
     if (!rows.length) return R.forbidden(res, 'Cannot revoke this broadcast');
-    return R.success(res, { revoked: true });
+    return R.ok(res, { revoked: true });
   } catch (err) { next(err); }
 };
