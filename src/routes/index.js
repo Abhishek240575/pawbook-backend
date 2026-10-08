@@ -304,4 +304,31 @@ router.get('/events/:id', authenticate, evtCtrl.getEvent);
 router.post('/events', authenticate, evtCtrl.createEvent);
 router.post('/events/:id/rsvp', authenticate, evtCtrl.rsvpEvent);
 router.delete('/events/:id', authenticate, evtCtrl.deleteEvent);
+// ── ADD THESE LINES TO src/routes/index.js ──────────────────────────────────
+// Place them before module.exports = router;
+
+const savedCtrl        = require('../controllers/saved.controller');
+const fundraisingCtrl  = require('../controllers/fundraising.controller');
+const activityCtrl     = require('../controllers/activity.controller');
+const memoriesCtrl     = require('../controllers/memories.controller');
+
+// Saved posts
+router.get('/saved',              authenticate, savedCtrl.getSaved);
+router.post('/saved/:postId',     authenticate, savedCtrl.savePost);
+router.delete('/saved/:postId',   authenticate, savedCtrl.unsavePost);
+
+// Fundraising
+router.get('/fundraising',            authenticate, fundraisingCtrl.getCampaigns);
+router.get('/fundraising/:id',        authenticate, fundraisingCtrl.getCampaign);
+router.post('/fundraising',           authenticate, fundraisingCtrl.createCampaign);
+router.post('/fundraising/:id/donate',authenticate, fundraisingCtrl.donate);
+
+// Activity log
+router.get('/activity',   authenticate, activityCtrl.getActivity);
+router.post('/activity',  authenticate, activityCtrl.logActivity);
+
+// Memories & Birthdays
+router.get('/memories',   authenticate, memoriesCtrl.getMemories);
+router.get('/birthdays',  authenticate, memoriesCtrl.getBirthdays);
+
 module.exports = router;
