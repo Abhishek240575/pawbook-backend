@@ -318,9 +318,23 @@ async function getVetChats(req, res) {
   } catch (err) { return R.serverError(res, err.message); }
 }
 
+// ── Aliases for existing routes ───────────────────────────────────────────────
+async function getVets(req, res) { return listVets(req, res); }
+async function getNearbyVets(req, res) { return listVets(req, res); }
+async function getVetProfile(req, res) {
+  req.params.id = req.params.user_id;   // existing route uses :user_id
+  return getVet(req, res);
+}
+async function getMyAppointments(req, res) { return getAppointments(req, res); }
+async function getVetAppointments(req, res) { return R.ok(res, []); } // stub
+async function rateAppointment(req, res) { return reviewVet(req, res); }
+
 module.exports = {
   listVets, getVet, getVetSlots,
   bookAppointment, getAppointments, getAppointment, updateAppointment,
   getPrescriptions, getPrescription,
-  registerVet, reviewVet, getVetChats
+  registerVet, reviewVet, getVetChats,
+  // aliases
+  getVets, getNearbyVets, getVetProfile,
+  getMyAppointments, getVetAppointments, rateAppointment
 };
