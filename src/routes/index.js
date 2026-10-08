@@ -1,4 +1,4 @@
-﻿const router = require('express').Router();
+const router = require('express').Router();
 const { body, param, query } = require('express-validator');
 
 const {
@@ -6,11 +6,18 @@ const {
   validate, parsePagination
 } = require('../middleware');
 
-const authCtrl = require('../controllers/auth.controller');
-const userCtrl = require('../controllers/user.controller');
-const petCtrl  = require('../controllers/pet.controller');
-const postCtrl = require('../controllers/post.controller');
-const vetCtrl  = require('../controllers/vet.controller');
+const authCtrl         = require('../controllers/auth.controller');
+const userCtrl         = require('../controllers/user.controller');
+const petCtrl          = require('../controllers/pet.controller');
+const postCtrl         = require('../controllers/post.controller');
+const vetCtrl          = require('../controllers/vet.controller');
+const savedCtrl        = require('../controllers/saved.controller');
+const fundraisingCtrl  = require('../controllers/fundraising.controller');
+const activityCtrl     = require('../controllers/activity.controller');
+const memoriesCtrl     = require('../controllers/memories.controller');
+const mediaCtrl        = require('../controllers/media.controller');
+const evtCtrl          = require('../controllers/event.controller');
+const msgCtrl          = require('../controllers/message.controller');
 
 // ── AUTH ──────────────────────────────────────────────────────
 const authRouter = require('express').Router();
@@ -130,35 +137,33 @@ postRouter.delete('/comments/:comment_id', authenticate, [
 router.use('/posts', postRouter);
 
 // ── VETS ──────────────────────────────────────────────────────
-const vetRouter = require('express').Router();
+// Static paths MUST come before /:id to avoid interception
+router.get('/vets',                vetCtrl.getVets);
+router.get('/vets/chats',          authenticate, vetCtrl.getVetChats);
+router.post('/vets/register',      authenticate, vetCtrl.registerVet);
 
-vetRouter.get('/',                    parsePagination, vetCtrl.getVets);
-vetRouter.get('/nearby',              authenticate, vetCtrl.getNearbyVets);
-vetRouter.get('/:user_id',            vetCtrl.getVetProfile);
+// Parameterized vet routes
+router.get('/vets/:id',            vetCtrl.getVetProfile);
+router.get('/vets/:id/slots',      vetCtrl.getVetSlots);
+router.post('/vets/:id/review',    authenticate, [
+  body('rating').isInt({ min:1, max:5 }),
+], validate, vetCtrl.reviewVet);
 
-vetRouter.post('/appointments', authenticate, [
+// ── APPOINTMENTS ──────────────────────────────────────────────
+router.post('/appointments', authenticate, [
   body('vet_id').isUUID(),
-  body('pet_id').isUUID(),
-  body('scheduled_at').isISO8601(),
-  body('fee_inr').isFloat({ min: 0 }),
+  body('appt_date').notEmpty(),
+  body('appt_time').notEmpty(),
+  body('consult_type').isIn(['Video','Audio','In-Clinic']),
 ], validate, vetCtrl.bookAppointment);
 
-vetRouter.get('/appointments/mine',   authenticate, parsePagination, vetCtrl.getMyAppointments);
-vetRouter.get('/appointments/vet',    authenticate, requireRole('vet'), parsePagination, vetCtrl.getVetAppointments);
+router.get('/appointments',        authenticate, vetCtrl.getAppointments);
+router.get('/appointments/:id',    authenticate, vetCtrl.getAppointment);
+router.patch('/appointments/:id',  authenticate, vetCtrl.updateAppointment);
 
-vetRouter.patch('/appointments/:appointment_id',
-  authenticate, [
-  param('appointment_id').isUUID(),
-  body('status').isIn(['confirmed','in_progress','completed','cancelled','no_show']),
-], validate, vetCtrl.updateAppointment);
-
-vetRouter.post('/appointments/:appointment_id/rate',
-  authenticate, [
-  param('appointment_id').isUUID(),
-  body('rating').isInt({ min:1, max:5 }),
-], validate, vetCtrl.rateAppointment);
-
-router.use('/vets', vetRouter);
+// ── PRESCRIPTIONS ─────────────────────────────────────────────
+router.get('/prescriptions',       authenticate, vetCtrl.getPrescriptions);
+router.get('/prescriptions/:id',   authenticate, vetCtrl.getPrescription);
 
 // ── SEARCH ────────────────────────────────────────────────────
 router.get('/search', authenticate, async (req, res, next) => {
@@ -172,7 +177,6 @@ router.get('/search', authenticate, async (req, res, next) => {
       `SELECT * FROM fn_search($1, $2)`,
       [q.trim(), category]
     );
-    // Log search
     await dbQuery(
       `INSERT INTO "SearchHistory" (user_id, query, category, result_count)
        VALUES ($1, $2, $3, $4)`,
@@ -202,7 +206,6 @@ router.get('/notifications', authenticate, parsePagination, async (req, res, nex
         WHERE recipient_id = $1`,
       [req.user.user_id]
     );
-    // Mark all as read
     await dbQuery(
       `UPDATE "Notification"
           SET is_read = TRUE, read_at = NOW()
@@ -229,9 +232,8 @@ router.get('/health', async (req, res) => {
     res.status(503).json({ success: false, message: 'DB unavailable' });
   }
 });
-// ═══════════════════════════════════════════════════════════════════════════
-// PASTE THIS BLOCK into src/routes/index.js BEFORE 
-// ── NEW FEATURE ROUTES ──────────────────────────────────────────
+
+// ── OTHER FEATURE ROUTES ───────────────────────────────────────
 router.use('/appointments',  require('./appointments'));
 router.use('/pawmatch',      require('./pawmatch'));
 router.use('/vaccinations',  require('./vaccinations'));
@@ -240,16 +242,13 @@ router.use('/notifications', require('./notifications'));
 router.use('/insurance',     require('./insurance'));
 router.use('/training',      require('./training'));
 router.use('/travel',        require('./travel'));
-router.use('/businesses', require('./business.routes'));
-router.use('/overpass', require('./overpass.routes'));
-// ── MESSAGES (DM + Group + Broadcast) ────────────────────────────────────────
-const msgCtrl = require('../controllers/message.controller');
+router.use('/businesses',    require('./business.routes'));
+router.use('/overpass',      require('./overpass.routes'));
 
-// People list & search
+// ── MESSAGES (DM + Group + Broadcast) ────────────────────────────────────────
 router.get('/messages/users',        authenticate, msgCtrl.getUsers);
 router.get('/messages/search-users', authenticate, msgCtrl.searchUsers);
 
-// DM Conversations
 const convRouter = require('express').Router();
 convRouter.get('/',                             authenticate, parsePagination, msgCtrl.getConversations);
 convRouter.post('/', authenticate, [
@@ -266,7 +265,6 @@ convRouter.delete('/:conversation_id/messages/:message_id', authenticate, msgCtr
 convRouter.post('/:conversation_id/messages/:message_id/revoke', authenticate, msgCtrl.revokeDM);
 router.use('/conversations', convRouter);
 
-// Group Conversations
 const gcRouter = require('express').Router();
 gcRouter.get('/',    authenticate, msgCtrl.getGroupConvs);
 gcRouter.post('/', authenticate, [
@@ -287,7 +285,6 @@ gcRouter.post('/:group_conv_id/members', authenticate, [
 ], validate, msgCtrl.addGroupMembers);
 router.use('/group-conversations', gcRouter);
 
-// Broadcasts
 const bcRouter = require('express').Router();
 bcRouter.get('/',    authenticate, parsePagination, msgCtrl.getBroadcasts);
 bcRouter.post('/', authenticate, [
@@ -298,41 +295,34 @@ bcRouter.patch('/:broadcast_id', authenticate, [
 ], validate, msgCtrl.editBroadcast);
 bcRouter.post('/:broadcast_id/revoke', authenticate, msgCtrl.revokeBroadcast);
 router.use('/broadcasts', bcRouter);
-const evtCtrl = require('../controllers/event.controller');
-router.get('/events', authenticate, evtCtrl.getEvents);
-router.get('/events/:id', authenticate, evtCtrl.getEvent);
-router.post('/events', authenticate, evtCtrl.createEvent);
-router.post('/events/:id/rsvp', authenticate, evtCtrl.rsvpEvent);
-router.delete('/events/:id', authenticate, evtCtrl.deleteEvent);
-// ── ADD THESE LINES TO src/routes/index.js ──────────────────────────────────
-// Place them before module.exports = router;
 
-const savedCtrl        = require('../controllers/saved.controller');
-const fundraisingCtrl  = require('../controllers/fundraising.controller');
-const activityCtrl     = require('../controllers/activity.controller');
-const memoriesCtrl     = require('../controllers/memories.controller');
+// ── EVENTS ────────────────────────────────────────────────────
+router.get('/events',          authenticate, evtCtrl.getEvents);
+router.get('/events/:id',      authenticate, evtCtrl.getEvent);
+router.post('/events',         authenticate, evtCtrl.createEvent);
+router.post('/events/:id/rsvp',authenticate, evtCtrl.rsvpEvent);
+router.delete('/events/:id',   authenticate, evtCtrl.deleteEvent);
 
-// Saved posts
+// ── SAVED ─────────────────────────────────────────────────────
 router.get('/saved',              authenticate, savedCtrl.getSaved);
 router.post('/saved/:postId',     authenticate, savedCtrl.savePost);
 router.delete('/saved/:postId',   authenticate, savedCtrl.unsavePost);
 
-// Fundraising
-router.get('/fundraising',            authenticate, fundraisingCtrl.getCampaigns);
-router.get('/fundraising/:id',        authenticate, fundraisingCtrl.getCampaign);
-router.post('/fundraising',           authenticate, fundraisingCtrl.createCampaign);
-router.post('/fundraising/:id/donate',authenticate, fundraisingCtrl.donate);
+// ── FUNDRAISING ───────────────────────────────────────────────
+router.get('/fundraising',             authenticate, fundraisingCtrl.getCampaigns);
+router.get('/fundraising/:id',         authenticate, fundraisingCtrl.getCampaign);
+router.post('/fundraising',            authenticate, fundraisingCtrl.createCampaign);
+router.post('/fundraising/:id/donate', authenticate, fundraisingCtrl.donate);
 
-// Activity log
+// ── ACTIVITY ──────────────────────────────────────────────────
 router.get('/activity',   authenticate, activityCtrl.getActivity);
 router.post('/activity',  authenticate, activityCtrl.logActivity);
 
-// Memories & Birthdays
+// ── MEMORIES & BIRTHDAYS ──────────────────────────────────────
 router.get('/memories',   authenticate, memoriesCtrl.getMemories);
 router.get('/birthdays',  authenticate, memoriesCtrl.getBirthdays);
 
-const mediaCtrl = require('../controllers/media.controller');
-
+// ── MEDIA GALLERY ─────────────────────────────────────────────
 router.get('/media/gallery',        authenticate, mediaCtrl.getGallery);
 router.get('/media/highlights',     authenticate, mediaCtrl.getHighlights);
 router.get('/media/tagged',         authenticate, mediaCtrl.getTagged);
