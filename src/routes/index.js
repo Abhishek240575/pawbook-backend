@@ -234,7 +234,7 @@ router.get('/health', async (req, res) => {
 });
 
 // ── OTHER FEATURE ROUTES ───────────────────────────────────────
-router.use('/appointments',  require('./appointments'));
+// appointments handled by flat routes above (vetCtrl)
 router.use('/pawmatch',      require('./pawmatch'));
 router.use('/vaccinations',  require('./vaccinations'));
 router.use('/reviews',       require('./reviews'));
