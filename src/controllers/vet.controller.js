@@ -335,6 +335,6 @@ module.exports = {
   getPrescriptions, getPrescription,
   registerVet, reviewVet, getVetChats,
   // aliases
-  getVets, getNearbyVets, getVetProfile,
+  getVets, getNearbyVets, getVetProfile, bookAppointment, getAppointments, getAppointment, updateAppointment, getPrescriptions, getPrescription,
   getMyAppointments, getVetAppointments, rateAppointment
 };
