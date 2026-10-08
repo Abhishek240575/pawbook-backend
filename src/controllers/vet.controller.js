@@ -1,4 +1,4 @@
-const pool = require('../config/db');
+const { pool, query: dbQuery } = require('../config/db');
 const R = require('../utils/response');
 
 // ── GET /api/v1/vets ──────────────────────────────────────────────────────────
