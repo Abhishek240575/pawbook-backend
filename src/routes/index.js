@@ -154,7 +154,7 @@ router.post('/appointments', authenticate, [
   body('vet_id').isUUID(),
   body('appt_date').notEmpty(),
   body('appt_time').notEmpty(),
-  body('consult_type').isIn(['Video','Audio','In-Clinic']),
+  body('consult_type').isIn(['Video','Chat','In-Clinic']),
 ], validate, vetCtrl.bookAppointment);
 
 router.get('/appointments',        authenticate, vetCtrl.getAppointments);
