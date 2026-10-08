@@ -331,4 +331,18 @@ router.post('/activity',  authenticate, activityCtrl.logActivity);
 router.get('/memories',   authenticate, memoriesCtrl.getMemories);
 router.get('/birthdays',  authenticate, memoriesCtrl.getBirthdays);
 
+const mediaCtrl = require('../controllers/media.controller');
+
+router.get('/media/gallery',        authenticate, mediaCtrl.getGallery);
+router.get('/media/highlights',     authenticate, mediaCtrl.getHighlights);
+router.get('/media/tagged',         authenticate, mediaCtrl.getTagged);
+router.get('/media/albums',         authenticate, mediaCtrl.getAlbums);
+router.post('/media/albums',        authenticate, mediaCtrl.createAlbum);
+router.get('/media/albums/:id',     authenticate, mediaCtrl.getAlbum);
+router.patch('/media/albums/:id',   authenticate, mediaCtrl.updateAlbum);
+router.delete('/media/albums/:id',  authenticate, mediaCtrl.deleteAlbum);
+router.post('/media/upload',        authenticate, mediaCtrl.uploadMedia);
+router.patch('/media/:id',          authenticate, mediaCtrl.updateMedia);
+router.delete('/media/:id',         authenticate, mediaCtrl.deleteMedia);
+
 module.exports = router;
