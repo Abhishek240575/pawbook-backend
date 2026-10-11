@@ -26,6 +26,7 @@ app.use('/api/groups',        require('./routes/groups'));
 app.use('/api/insurance',     require('./routes/insurance'));
 app.use('/api/training',      require('./routes/training'));
 app.use('/api/travel',        require('./routes/travel'));
+app.use('/api/lost-pets',     require('./routes/lostPets'));
 
 // ── 404 fallback ──────────────────────────────────
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
