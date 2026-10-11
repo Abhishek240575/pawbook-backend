@@ -30,7 +30,7 @@ const getMyPets = async (req, res, next) => {
   try {
     const { rows } = await query(
       `SELECT p.* FROM pets p
-       JOIN users u ON u.id = p.user_id
+       JOIN users u ON u.user_no = p.user_id
        WHERE u.user_id = $1
        ORDER BY p.created_at DESC`,
       [req.user.user_id]
