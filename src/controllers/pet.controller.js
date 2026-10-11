@@ -29,9 +29,10 @@ const createPet = async (req, res, next) => {
 const getMyPets = async (req, res, next) => {
   try {
     const { rows } = await query(
-      `SELECT * FROM v_pet_full
-        WHERE owner_id = $1
-        ORDER BY created_at DESC`,
+      `SELECT p.* FROM pets p
+       JOIN users u ON u.id = p.user_id
+       WHERE u.user_id = $1
+       ORDER BY p.created_at DESC`,
       [req.user.user_id]
     );
     return R.ok(res, rows);
