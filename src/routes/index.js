@@ -18,6 +18,7 @@ const memoriesCtrl     = require('../controllers/memories.controller');
 const mediaCtrl        = require('../controllers/media.controller');
 const evtCtrl          = require('../controllers/event.controller');
 const msgCtrl          = require('../controllers/message.controller');
+const adoptionCtrl     = require('../controllers/adoption.controller');
 
 // ── AUTH ──────────────────────────────────────────────────────
 const authRouter = require('express').Router();
@@ -334,5 +335,11 @@ router.delete('/media/albums/:id',  authenticate, mediaCtrl.deleteAlbum);
 router.post('/media/upload',        authenticate, mediaCtrl.uploadMedia);
 router.patch('/media/:id',          authenticate, mediaCtrl.updateMedia);
 router.delete('/media/:id',         authenticate, mediaCtrl.deleteMedia);
+// ── Adoption routes ──────────────────────────────────────────────
+router.get('/adoptions/pets', adoptionCtrl.getPets);
+router.get('/adoptions/pets/:id', adoptionCtrl.getPetById);
+router.get('/adoptions/shelters', adoptionCtrl.getShelters);
+router.post('/adoptions/inquire', authenticate, adoptionCtrl.createInquiry);
+router.get('/adoptions/my-inquiries', authenticate, adoptionCtrl.getMyInquiries);
 
 module.exports = router;
