@@ -21,6 +21,7 @@ const evtCtrl          = require('../controllers/event.controller');
 const msgCtrl          = require('../controllers/message.controller');
 const adoptionCtrl     = require('../controllers/adoption.controller');
 const nutrCtrl         = require('../controllers/nutrition.controller');
+const trainCtrl        = require('../controllers/training.controller');
 
 // ── AUTH ──────────────────────────────────────────────────────
 const authRouter = require('express').Router();
@@ -424,5 +425,28 @@ nutrRouter.post('/my-plans',      authenticate, [
 nutrRouter.delete('/my-plans/:id', authenticate, nutrCtrl.removePlan);
 
 router.use('/nutrition', nutrRouter);
+
+// ── TRAINING ──────────────────────────────────────────────────
+// 1. Add near the top of index.js with other controller requires:
+//    const trainCtrl = require('../controllers/training.controller');
+//
+// 2. Add this block before module.exports = router;
+
+const trainRouter = require('express').Router();
+
+trainRouter.get('/sessions',          trainCtrl.getSessions);
+trainRouter.get('/trainers',          trainCtrl.getTrainers);
+trainRouter.get('/bookings',          authenticate, trainCtrl.getMyBookings);
+trainRouter.post('/bookings',         authenticate, [
+  body('trainer_name').notEmpty(),
+  body('session_date').optional().isDate(),
+], validate, trainCtrl.createBooking);
+trainRouter.get('/progress',          authenticate, trainCtrl.getMyProgress);
+trainRouter.post('/progress',         authenticate, [
+  body('session_title').notEmpty(),
+], validate, trainCtrl.saveProgress);
+
+router.use('/training', trainRouter);
+
 
 module.exports = router;
