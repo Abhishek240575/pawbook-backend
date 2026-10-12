@@ -20,6 +20,7 @@ const mediaCtrl        = require('../controllers/media.controller');
 const evtCtrl          = require('../controllers/event.controller');
 const msgCtrl          = require('../controllers/message.controller');
 const adoptionCtrl     = require('../controllers/adoption.controller');
+const nutrCtrl         = require('../controllers/nutrition.controller');
 
 // ── AUTH ──────────────────────────────────────────────────────
 const authRouter = require('express').Router();
@@ -402,5 +403,26 @@ marketRouter.patch('/orders/:order_id/status', authenticate, [
 ], validate, marketCtrl.updateOrderStatus);
 
 router.use('/marketplace', marketRouter);
+
+// ── NUTRITION ─────────────────────────────────────────────────
+// Add this require near the top of index.js with the other controllers:
+// const nutrCtrl = require('../controllers/nutrition.controller');
+//
+// Then add this block before module.exports = router;
+
+const nutrRouter = require('express').Router();
+
+nutrRouter.get('/plans',          nutrCtrl.getPlans);
+nutrRouter.get('/plans/:id',      nutrCtrl.getPlan);
+nutrRouter.get('/foods',          nutrCtrl.getFoods);
+nutrRouter.get('/recommend',      nutrCtrl.recommend);
+nutrRouter.get('/my-plans',       authenticate, nutrCtrl.getMyPlans);
+nutrRouter.post('/my-plans',      authenticate, [
+  body('plan_id').optional().isInt(),
+  body('pet_id').optional().isUUID(),
+], validate, nutrCtrl.savePlan);
+nutrRouter.delete('/my-plans/:id', authenticate, nutrCtrl.removePlan);
+
+router.use('/nutrition', nutrRouter);
 
 module.exports = router;
