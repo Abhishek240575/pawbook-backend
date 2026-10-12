@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const { body, param, query } = require('express-validator');
+const marketCtrl = require('../controllers/marketplace.controller');
 
 const {
   authenticate, requireRole, requireVerified,
@@ -335,11 +336,71 @@ router.delete('/media/albums/:id',  authenticate, mediaCtrl.deleteAlbum);
 router.post('/media/upload',        authenticate, mediaCtrl.uploadMedia);
 router.patch('/media/:id',          authenticate, mediaCtrl.updateMedia);
 router.delete('/media/:id',         authenticate, mediaCtrl.deleteMedia);
+
 // ── Adoption routes ──────────────────────────────────────────────
 router.get('/adoptions/pets', adoptionCtrl.getPets);
 router.get('/adoptions/pets/:id', adoptionCtrl.getPetById);
 router.get('/adoptions/shelters', adoptionCtrl.getShelters);
 router.post('/adoptions/inquire', authenticate, adoptionCtrl.createInquiry);
 router.get('/adoptions/my-inquiries', authenticate, adoptionCtrl.getMyInquiries);
+
+// ── MARKETPLACE ───────────────────────────────────────────────
+const marketRouter = require('express').Router();
+
+// ── PUBLIC BROWSE ─────────────────────────────────────────────
+marketRouter.get('/products',              marketCtrl.getProducts);
+marketRouter.get('/products/:product_id',  marketCtrl.getProduct);
+marketRouter.get('/listings',              marketCtrl.getListings);
+marketRouter.get('/listings/:listing_id',  marketCtrl.getListing);
+
+// ── STORE (seller) ────────────────────────────────────────────
+marketRouter.post('/store', authenticate, [
+  body('name').trim().isLength({ min: 2, max: 100 }),
+], validate, marketCtrl.createStore);
+
+marketRouter.get('/store/me',   authenticate, marketCtrl.getMyStore);
+marketRouter.patch('/store/me', authenticate, marketCtrl.updateMyStore);
+
+// ── LISTINGS (seller CRUD) ────────────────────────────────────
+marketRouter.post('/listings', authenticate, [
+  body('title').trim().notEmpty(),
+  body('price').isFloat({ min: 0 }),
+  body('category').optional().isIn(['pet-products','food','grooming','accessories','vet-services']),
+], validate, marketCtrl.createListing);
+
+marketRouter.patch('/listings/:listing_id',  authenticate, marketCtrl.updateListing);
+marketRouter.delete('/listings/:listing_id', authenticate, marketCtrl.deleteListing);
+
+// ── REVIEWS ───────────────────────────────────────────────────
+marketRouter.get('/listings/:listing_id/reviews',  marketCtrl.getReviews);
+marketRouter.post('/listings/:listing_id/reviews', authenticate, [
+  body('rating').isInt({ min: 1, max: 5 }),
+], validate, marketCtrl.addReview);
+
+// ── CART ──────────────────────────────────────────────────────
+marketRouter.get('/cart', authenticate, marketCtrl.getCart);
+marketRouter.post('/cart', authenticate, [
+  body('product_id').optional().isUUID(),
+  body('listing_id').optional().isUUID(),
+  body('quantity').optional().isInt({ min: 1 }),
+], validate, marketCtrl.addToCart);
+marketRouter.patch('/cart/:cart_id', authenticate, [
+  body('quantity').isInt({ min: 1 }),
+], validate, marketCtrl.updateCartItem);
+marketRouter.delete('/cart/:cart_id', authenticate, marketCtrl.removeFromCart);
+
+// ── ORDERS — static routes BEFORE parameterized ───────────────
+marketRouter.get('/orders/seller',             authenticate, marketCtrl.getSellerOrders);
+marketRouter.post('/orders', authenticate, [
+  body('delivery_address').optional(),
+  body('payment_method').optional().isIn(['cod','upi','card','netbanking']),
+], validate, marketCtrl.placeOrder);
+marketRouter.get('/orders',                    authenticate, marketCtrl.getMyOrders);
+marketRouter.get('/orders/:order_id',          authenticate, marketCtrl.getOrder);
+marketRouter.patch('/orders/:order_id/status', authenticate, [
+  body('status').isIn(['pending','confirmed','shipped','delivered','cancelled','refunded']),
+], validate, marketCtrl.updateOrderStatus);
+
+router.use('/marketplace', marketRouter);
 
 module.exports = router;
