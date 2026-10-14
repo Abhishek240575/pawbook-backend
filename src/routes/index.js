@@ -23,6 +23,7 @@ const adoptionCtrl     = require('../controllers/adoption.controller');
 const nutrCtrl         = require('../controllers/nutrition.controller');
 const trainCtrl        = require('../controllers/training.controller');
 const analyticsCtrl    = require('../controllers/analytics.controller');
+const notifCtrl        = require('../controllers/notifications.controller');
 
 // ── AUTH ──────────────────────────────────────────────────────
 const authRouter = require('express').Router();
@@ -457,6 +458,16 @@ analyticsRouter.post('/activity', authenticate, [
   body('value_num').optional().isFloat({ min: 0 }),
 ], validate, analyticsCtrl.logActivity);
 router.use('/analytics', analyticsRouter);
+
+
+// before module.exports = router:
+const notifRouter = require('express').Router();
+notifRouter.get('/',           authenticate, notifCtrl.getNotifications);
+notifRouter.patch('/read-all', authenticate, notifCtrl.markAllRead);
+notifRouter.patch('/:id/read', authenticate, notifCtrl.markOneRead);
+notifRouter.post('/',          authenticate, [body('user_id').notEmpty(), body('title').notEmpty()], validate, notifCtrl.createNotification);
+notifRouter.delete('/:id',     authenticate, notifCtrl.deleteNotification);
+router.use('/notifications', notifRouter);
 
 
 module.exports = router;
