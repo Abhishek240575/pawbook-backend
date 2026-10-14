@@ -22,6 +22,7 @@ const msgCtrl          = require('../controllers/message.controller');
 const adoptionCtrl     = require('../controllers/adoption.controller');
 const nutrCtrl         = require('../controllers/nutrition.controller');
 const trainCtrl        = require('../controllers/training.controller');
+const analyticsCtrl    = require('../controllers/analytics.controller');
 
 // ── AUTH ──────────────────────────────────────────────────────
 const authRouter = require('express').Router();
@@ -447,6 +448,15 @@ trainRouter.post('/progress',         authenticate, [
 ], validate, trainCtrl.saveProgress);
 
 router.use('/training', trainRouter);
+
+// before module.exports = router:
+const analyticsRouter = require('express').Router();
+analyticsRouter.get('/summary',   authenticate, analyticsCtrl.getSummary);
+analyticsRouter.post('/activity', authenticate, [
+  body('activity_type').isIn(['walk','sleep','weight','hydration','appetite','grooming']),
+  body('value_num').optional().isFloat({ min: 0 }),
+], validate, analyticsCtrl.logActivity);
+router.use('/analytics', analyticsRouter);
 
 
 module.exports = router;

@@ -1,191 +1,191 @@
-const { query } = require('../config/db');
-const R = require('../utils/response');
+'use strict';
+/**
+ * analytics.controller.js
+ * Drop into: src/controllers/analytics.controller.js
+ */
 
-// ── USER ANALYTICS DASHBOARD ─────────────────────────────────────────────────
-const getMyAnalytics = async (req, res, next) => {
-  const user_id = req.user.user_id;
+const { query: dbQuery } = require('../config/db');
+
+/* ─────────────────────────────────────────────────────────────
+   GET /api/v1/analytics/summary   (auth required)
+   Returns aggregated stats for the logged-in user's dashboard
+───────────────────────────────────────────────────────────── */
+exports.getSummary = async (req, res, next) => {
   try {
-    const [profileStats, petStats, postStats, vetStats, weeklyPosts] = await Promise.all([
-      // Followers / following / pets
-      query(
-        `SELECT
-           COUNT(DISTINCT f_in.follower_id)  AS followers,
-           COUNT(DISTINCT f_out.followee_id) AS following,
-           COUNT(DISTINCT p.pet_id)          AS pets
-         FROM "User" u
-         LEFT JOIN "Follower" f_in  ON f_in.followee_id  = u.user_id AND f_in.status  = 'accepted'
-         LEFT JOIN "Follower" f_out ON f_out.follower_id = u.user_id AND f_out.status = 'accepted'
-         LEFT JOIN "Pet" p          ON p.owner_id        = u.user_id AND p.deleted_at IS NULL
-        WHERE u.user_id = $1`,
-        [user_id]
+    const uid = req.user.user_id;
+
+    // Run all queries in parallel
+    const [
+      activityRows,
+      socialRows,
+      vetRows,
+      trainingRows,
+      vaccinationRows,
+      walkChartRows,
+      engagementRows,
+    ] = await Promise.all([
+
+      // Avg daily walk (last 7 days)
+      dbQuery(
+        `SELECT COALESCE(AVG(value_num),0) AS avg_walk,
+                COALESCE(SUM(value_num),0) AS total_walk
+         FROM pet_activity_logs
+         WHERE user_id=$1 AND activity_type='walk'
+           AND logged_at >= NOW() - INTERVAL '7 days'`,
+        [uid]
       ),
-      // Pet health
-      query(
+
+      // Social stats: followers count, post count, reactions
+      dbQuery(
         `SELECT
-           COUNT(DISTINCT vr.record_id) AS total_vaccinations,
-           COUNT(DISTINCT CASE WHEN vr.next_due_at < NOW() THEN vr.record_id END) AS overdue_vaccinations,
-           COUNT(DISTINCT va.appointment_id) AS total_vet_visits
-         FROM "Pet" p
-         LEFT JOIN "VaccinationRecord" vr ON vr.pet_id = p.pet_id
-         LEFT JOIN "VetAppointment" va    ON va.pet_id = p.pet_id AND va.status = 'completed'
-        WHERE p.owner_id = $1 AND p.deleted_at IS NULL`,
-        [user_id]
+           (SELECT COUNT(*) FROM follows       WHERE following_id=$1)   AS followers,
+           (SELECT COUNT(*) FROM posts         WHERE user_id=$1)        AS posts,
+           (SELECT COALESCE(SUM(likes_count),0) FROM posts WHERE user_id=$1) AS reactions
+        `,
+        [uid]
       ),
-      // Post engagement last 30 days
-      query(
+
+      // Vet visits this year
+      dbQuery(
+        `SELECT COUNT(*) AS vet_visits
+         FROM vet_appointments
+         WHERE user_id=$1
+           AND appointment_date >= date_trunc('year', NOW())`,
+        [uid]
+      ),
+
+      // Training sessions completed
+      dbQuery(
+        `SELECT COUNT(*) AS sessions_done,
+                MAX(completed_at) AS last_session
+         FROM user_training_progress
+         WHERE user_id=$1`,
+        [uid]
+      ),
+
+      // Next upcoming vaccination
+      dbQuery(
+        `SELECT vaccine_name, next_due_date
+         FROM vaccinations
+         WHERE user_id=$1 AND next_due_date >= CURRENT_DATE
+         ORDER BY next_due_date ASC LIMIT 1`,
+        [uid]
+      ),
+
+      // Walk chart: last 7 days individually
+      dbQuery(
+        `SELECT TO_CHAR(logged_at,'Dy') AS day,
+                ROUND(AVG(value_num)::numeric,1) AS km
+         FROM pet_activity_logs
+         WHERE user_id=$1 AND activity_type='walk'
+           AND logged_at >= NOW() - INTERVAL '7 days'
+         GROUP BY TO_CHAR(logged_at,'Dy'), DATE(logged_at)
+         ORDER BY DATE(logged_at)`,
+        [uid]
+      ),
+
+      // Post engagement: last 4 weeks grouped
+      dbQuery(
         `SELECT
-           COUNT(DISTINCT po.post_id)              AS total_posts,
-           COALESCE(SUM(po.reaction_count), 0)     AS total_reactions,
-           COALESCE(SUM(po.comment_count), 0)      AS total_comments,
-           COALESCE(SUM(po.view_count), 0)         AS total_views
-         FROM "Post" po
-        WHERE po.author_id = $1
-          AND po.deleted_at IS NULL
-          AND po.created_at >= NOW() - INTERVAL '30 days'`,
-        [user_id]
+           'W'||CEIL(EXTRACT(DAY FROM (NOW()-created_at))/7.0)::int AS week,
+           COALESCE(SUM(likes_count),0) AS reactions
+         FROM posts
+         WHERE user_id=$1 AND created_at >= NOW() - INTERVAL '28 days'
+         GROUP BY week
+         ORDER BY week`,
+        [uid]
       ),
-      // Upcoming vet appointments
-      query(
-        `SELECT va.appointment_id, va.appointment_type, va.scheduled_at, va.status,
-                p.name AS pet_name, p.species,
-                u.full_name AS vet_name
-           FROM "VetAppointment" va
-           JOIN "Pet" p  ON p.pet_id  = va.pet_id
-           JOIN "User" u ON u.user_id = va.vet_id
-          WHERE va.owner_id = $1
-            AND va.status IN ('scheduled','confirmed')
-            AND va.scheduled_at >= NOW()
-          ORDER BY va.scheduled_at ASC LIMIT 5`,
-        [user_id]
-      ),
-      // Weekly posts last 7 days
-      query(
-        `SELECT
-           TO_CHAR(gs::date, 'Dy') AS day,
-           COUNT(po.post_id) AS posts,
-           COALESCE(SUM(po.reaction_count), 0) AS reactions
-         FROM generate_series(NOW() - INTERVAL '6 days', NOW(), '1 day'::interval) gs
-         LEFT JOIN "Post" po
-                ON po.created_at::date = gs::date
-               AND po.author_id = $1
-               AND po.deleted_at IS NULL
-         GROUP BY gs ORDER BY gs`,
-        [user_id]
-      )
     ]);
 
-    // Recent activity
-    const { rows: recentActivity } = await query(
-      `SELECT activity_type, ref_table, created_at
-         FROM "ActivityLog"
-        WHERE user_id = $1
-        ORDER BY created_at DESC LIMIT 20`,
-      [user_id]
-    ).catch(() => ({ rows: [] }));
+    // Latest health indicators from activity logs
+    const healthRows = await dbQuery(
+      `SELECT DISTINCT ON (activity_type) activity_type, value_num, unit, logged_at
+       FROM pet_activity_logs
+       WHERE user_id=$1
+       ORDER BY activity_type, logged_at DESC`,
+      [uid]
+    );
 
-    return R.ok(res, {
-      profile:         profileStats.rows[0],
-      health:          petStats.rows[0],
-      engagement:      postStats.rows[0],
-      upcoming_apts:   vetStats.rows,
-      recent_activity: recentActivity,
-      weekly_posts:    weeklyPosts.rows
+    // Recent activity feed (union of multiple event types)
+    const recentRows = await dbQuery(
+      `(SELECT 'walk' AS type, 'Morning walk' AS label,
+               value_num::text||' km completed' AS detail,
+               logged_at AS ts
+          FROM pet_activity_logs
+         WHERE user_id=$1 AND activity_type='walk'
+         ORDER BY logged_at DESC LIMIT 2)
+       UNION ALL
+       (SELECT 'vet', 'Vet appointment', 'booked for '||TO_CHAR(appointment_date,'Mon DD'), booked_at
+          FROM vet_appointments WHERE user_id=$1
+          ORDER BY booked_at DESC LIMIT 2)
+       UNION ALL
+       (SELECT 'training', 'Training session', session_title||' completed', completed_at
+          FROM user_training_progress WHERE user_id=$1
+          ORDER BY completed_at DESC LIMIT 2)
+       UNION ALL
+       (SELECT 'post', 'Post', 'received '||likes_count::text||' reactions', created_at
+          FROM posts WHERE user_id=$1 AND likes_count > 0
+          ORDER BY created_at DESC LIMIT 2)
+       ORDER BY ts DESC LIMIT 8`,
+      [uid]
+    );
+
+    // Upcoming events
+    const upcomingRows = await dbQuery(
+      `(SELECT 'vaccination' AS type, vaccine_name AS label, next_due_date AS due
+          FROM vaccinations WHERE user_id=$1 AND next_due_date >= CURRENT_DATE
+          ORDER BY next_due_date LIMIT 2)
+       UNION ALL
+       (SELECT 'vet', 'Vet Appointment',
+               appointment_date
+          FROM vet_appointments
+         WHERE user_id=$1 AND appointment_date >= CURRENT_DATE AND status='confirmed'
+         ORDER BY appointment_date LIMIT 2)
+       ORDER BY due LIMIT 4`,
+      [uid]
+    );
+
+    const s = socialRows.rows[0] || {};
+    const v = vetRows.rows[0] || {};
+    const t = trainingRows.rows[0] || {};
+    const a = activityRows.rows[0] || {};
+
+    return res.json({
+      success: true,
+      data: {
+        stats: {
+          avg_daily_walk_km: parseFloat(a.avg_walk || 0).toFixed(1),
+          followers:         parseInt(s.followers  || 0),
+          posts:             parseInt(s.posts      || 0),
+          reactions:         parseInt(s.reactions  || 0),
+          vet_visits_ytd:    parseInt(v.vet_visits || 0),
+          training_done:     parseInt(t.sessions_done || 0),
+        },
+        walk_chart:       walkChartRows.rows,
+        engagement_chart: engagementRows.rows,
+        health:           healthRows.rows,
+        recent:           recentRows.rows,
+        upcoming:         upcomingRows.rows,
+      }
     });
   } catch (err) { next(err); }
 };
 
-// ── INSURANCE ─────────────────────────────────────────────────────────────────
-const enrollInsurance = async (req, res, next) => {
-  const { pet_id, plan_type, plan_name, premium_inr } = req.body;
+/* ─────────────────────────────────────────────────────────────
+   POST /api/v1/analytics/activity   (auth required)
+   Log a pet activity (walk, sleep, weight, etc.)
+   Body: pet_name, activity_type, value_num, unit, notes
+───────────────────────────────────────────────────────────── */
+exports.logActivity = async (req, res, next) => {
   try {
-    const pet = await query(
-      `SELECT pet_id FROM "Pet" WHERE pet_id = $1 AND owner_id = $2 AND deleted_at IS NULL`,
-      [pet_id, req.user.user_id]
-    );
-    if (!pet.rows.length) return R.forbidden(res, 'Pet not found or not yours');
+    const uid = req.user.user_id;
+    const { pet_name, activity_type, value_num, unit, notes } = req.body;
 
-    const { rows } = await query(
-      `INSERT INTO "InsurancePlan"
-         (user_id, pet_id, plan_type, plan_name, premium_inr, status, start_date)
-       VALUES ($1,$2,$3,$4,$5,'active',NOW())
-       ON CONFLICT (pet_id) DO UPDATE
-          SET plan_type=$3, plan_name=$4, premium_inr=$5, updated_at=NOW()
-       RETURNING *`,
-      [req.user.user_id, pet_id, plan_type, plan_name, premium_inr]
+    const { rows } = await dbQuery(
+      `INSERT INTO pet_activity_logs(user_id,pet_name,activity_type,value_num,unit,notes)
+       VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [uid, pet_name||null, activity_type, value_num||null, unit||null, notes||null]
     );
-    return R.created(res, rows[0], 'Insurance enrolled');
+    return res.status(201).json({ success: true, data: rows[0] });
   } catch (err) { next(err); }
-};
-
-const getMyInsurance = async (req, res, next) => {
-  try {
-    const { rows } = await query(
-      `SELECT ip.*, p.name AS pet_name, p.species, p.avatar_url AS pet_avatar
-         FROM "InsurancePlan" ip
-         JOIN "Pet" p ON p.pet_id = ip.pet_id
-        WHERE ip.user_id = $1 ORDER BY ip.created_at DESC`,
-      [req.user.user_id]
-    );
-    return R.ok(res, rows);
-  } catch (err) { next(err); }
-};
-
-// ── TRAINING ─────────────────────────────────────────────────────────────────
-const bookTrainingSession = async (req, res, next) => {
-  const { pet_id, trainer_id, session_type, scheduled_at, notes } = req.body;
-  try {
-    const pet = await query(
-      `SELECT pet_id FROM "Pet" WHERE pet_id=$1 AND owner_id=$2 AND deleted_at IS NULL`,
-      [pet_id, req.user.user_id]
-    );
-    if (!pet.rows.length) return R.forbidden(res, 'Pet not found or not yours');
-    const { rows } = await query(
-      `INSERT INTO "TrainingSession"
-         (pet_id, owner_id, trainer_id, session_type, scheduled_at, notes, status)
-       VALUES ($1,$2,$3,$4,$5,$6,'scheduled') RETURNING *`,
-      [pet_id, req.user.user_id, trainer_id||null, session_type||'basic_obedience', scheduled_at, notes||null]
-    );
-    return R.created(res, rows[0], 'Session booked');
-  } catch (err) { next(err); }
-};
-
-const getMyTrainingSessions = async (req, res, next) => {
-  const { page, limit, offset } = req.pagination;
-  try {
-    const { rows: data } = await query(
-      `SELECT ts.*, p.name AS pet_name, p.species, p.avatar_url AS pet_avatar
-         FROM "TrainingSession" ts JOIN "Pet" p ON p.pet_id=ts.pet_id
-        WHERE ts.owner_id=$1 ORDER BY ts.scheduled_at DESC LIMIT $2 OFFSET $3`,
-      [req.user.user_id, limit, offset]
-    );
-    const { rows:[{total}] } = await query(
-      `SELECT COUNT(*) AS total FROM "TrainingSession" WHERE owner_id=$1`, [req.user.user_id]
-    );
-    return R.paginated(res, data, { page, limit, total: parseInt(total) });
-  } catch (err) { next(err); }
-};
-
-const updateTrainingProgress = async (req, res, next) => {
-  const { session_id } = req.params;
-  const { status, progress_notes, skills_achieved } = req.body;
-  try {
-    const { rows } = await query(
-      `UPDATE "TrainingSession"
-          SET status         = COALESCE($1, status),
-              progress_notes = COALESCE($2, progress_notes),
-              skills_achieved= COALESCE($3, skills_achieved),
-              updated_at     = NOW()
-        WHERE session_id=$4 AND (owner_id=$5 OR trainer_id=$5)
-        RETURNING *`,
-      [status, progress_notes, skills_achieved, session_id, req.user.user_id]
-    );
-    if (!rows.length) return R.notFound(res, 'Session not found');
-    return R.ok(res, rows[0], 'Progress updated');
-  } catch (err) { next(err); }
-};
-
-module.exports = {
-  getMyAnalytics,
-  enrollInsurance, getMyInsurance,
-  bookTrainingSession, getMyTrainingSessions, updateTrainingProgress
 };
