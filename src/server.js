@@ -45,6 +45,7 @@ app.use(defaultLimiter);
 
 // ── ROUTES ────────────────────────────────────────────────────
 app.use('/api/v1', routes);
+app.use('/api/vaccinations', require('./routes/vaccinations'));
 
 // ── 404 ───────────────────────────────────────────────────────
 app.use((req, res) => {
