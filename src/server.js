@@ -24,6 +24,7 @@ app.set('trust proxy', 1);
 // ── CORS ──────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = [
   'https://pawbook.deemona.com',   // production (update when domain is live)
+  'https://pawbook-frontend-cyxo.onrender.com',
   'http://localhost:5500',          // VS Code Live Server
   'http://127.0.0.1:5500',
   'http://localhost:3000',
