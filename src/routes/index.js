@@ -433,35 +433,6 @@ router.use('/nutrition', nutrRouter);
 // ── TRAINING ──────────────────────────────────────────────────
 // 1. Add near the top of index.js with other controller requires:
 //    const trainCtrl = require('../controllers/training.controller');
-//
-// 2. Add this block before module.exports = router;
-
-const trainRouter = require('express').Router();
-
-trainRouter.get('/sessions',          trainCtrl.getSessions);
-trainRouter.get('/trainers',          trainCtrl.getTrainers);
-trainRouter.get('/bookings',          authenticate, trainCtrl.getMyBookings);
-trainRouter.post('/bookings',         authenticate, [
-  body('trainer_name').notEmpty(),
-  body('session_date').optional().isDate(),
-], validate, trainCtrl.createBooking);
-trainRouter.get('/progress',          authenticate, trainCtrl.getMyProgress);
-trainRouter.post('/progress',         authenticate, [
-  body('session_title').notEmpty(),
-], validate, trainCtrl.saveProgress);
-
-router.use('/training', trainRouter);
-
-// before module.exports = router:
-const analyticsRouter = require('express').Router();
-analyticsRouter.get('/summary',   authenticate, analyticsCtrl.getSummary);
-analyticsRouter.post('/activity', authenticate, [
-  body('activity_type').isIn(['walk','sleep','weight','hydration','appetite','grooming']),
-  body('value_num').optional().isFloat({ min: 0 }),
-], validate, analyticsCtrl.logActivity);
-router.use('/analytics', analyticsRouter);
-
-
 // before module.exports = router:
 const notifRouter = require('express').Router();
 notifRouter.get('/',           authenticate, notifCtrl.getNotifications);
@@ -497,5 +468,10 @@ travelRouter.get('/saved',              authenticate, travelCtrl.getMySaved);
 travelRouter.post('/save',              authenticate, [body('dest_id').notEmpty()], validate, travelCtrl.saveDestination);
 travelRouter.delete('/save/:dest_id',   authenticate, travelCtrl.unsaveDestination);
 router.use('/travel', travelRouter);
+
+// ── Analytics ─────────────────────────────────────────────
+const analyticsRouter = require('express').Router();
+analyticsRouter.get('/me', authenticate, analyticsCtrl.getMyAnalytics);
+router.use('/analytics', analyticsRouter);
 
 module.exports = router;
