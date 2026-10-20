@@ -1,4 +1,4 @@
-﻿/**
+/**
  * src/controllers/analytics.controller.js
  * Real SQL aggregations for the analytics dashboard
  */
@@ -11,6 +11,7 @@ exports.getMyAnalytics = async (req, res) => {
 
     const [postsStats, engagementByDay, topPosts, followerGrowth, petsStats] = await Promise.all([
 
+      // Total posts, likes received, comments received
       db.query(`
         SELECT
           COUNT(p.post_id)::int                    AS total_posts,
@@ -20,6 +21,7 @@ exports.getMyAnalytics = async (req, res) => {
         FROM posts p WHERE p.user_id = $1 AND p.deleted_at IS NULL
       `, [uid]),
 
+      // Engagement per day (last 30 days)
       db.query(`
         SELECT
           DATE(p.created_at)::text                 AS day,
@@ -34,6 +36,7 @@ exports.getMyAnalytics = async (req, res) => {
         ORDER BY day ASC
       `, [uid]),
 
+      // Top 5 posts by likes
       db.query(`
         SELECT post_id, content, likes_count, comments_count, shares_count, created_at
         FROM posts
@@ -42,12 +45,14 @@ exports.getMyAnalytics = async (req, res) => {
         LIMIT 5
       `, [uid]),
 
+      // Follower count + following count
       db.query(`
         SELECT
           (SELECT COUNT(*) FROM follows WHERE following_id = $1)::int AS followers,
           (SELECT COUNT(*) FROM follows WHERE follower_id  = $1)::int AS following
       `, [uid]),
 
+      // Pets count
       db.query(`SELECT COUNT(*)::int AS pet_count FROM pets WHERE owner_id = $1`, [uid]),
     ]);
 
