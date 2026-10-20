@@ -1,0 +1,82 @@
+revenue manager---customer_revenue_summary, Monthly_sales_transaction, Pricing_changes, Product_performance, Sales_targets_vs_actual
+
+Cost Manager--Department_cost, General_ledger_expenses, Inventory_Movement, Manufacturing_cost_Report, payroll_summary , procurement_spend
+
+FP & A Manager---Budget_vs_Actual, Cashflow_forecast, Rolling_forecast
+
+CFO reporting Manager---Board_Templates(PPT) , Executive_Report_Template
+
+
+automate your banking reconcilliation process
+
+
+postgresql://neondb_owner:npg_e6gPWQ9kcsmq@ep-tiny-hall-azcaqbfp.c-3.ap-southeast-1.aws.neon.tech/neondb?
+
+git remote set-url origin https://informaticaabhishek79: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@github.com/informaticaabhishek79/wellconsult-web.git
+git push
+
+abhishek@pawbook.app
+
+
+2614925300234
+
+sumit matrimony===postgresql://neondb_owner:npg_08pgxOnDCKdM@ep-spring-rice-b3zq14m4-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+
+
+postgresql://neondb_owner:npg_cdWM1VSYliH7@ep-spring-block-b3mzpx5e-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+
+
+
+
+
+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
+
+
+
+postgresql://neondb_owner:npg_cdWM1VSYliH7@ep-spring-block-b3mzpx5e-pooler.c-4.ap-southeast-1.aws.neon.tech/neonpawbook?sslmode=require&channel_binding=require
+
+
+postgresql://neondb_owner:npg_jVcp9bPIJtD4@ep-floral-mouse-b54vd50s-pooler.c-7.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+
+$env:API_URL="http://localhost:4008"; npm run demo-data -- --phone=<9654135922>
+
+Lifesphere Neon connection string---postgresql://neondb_owner:npg_96RdfJwlIzyP@ep-floral-mouse-b54vd50s-pooler.c-7.us-east-2.aws.neon.tech/Lifesphere?sslmode=require&channel_binding=require
+
+Lifeshphere encryption key---PS C:\Users\Abhishek\lifesphere\lifesphere-web> node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+nY/vk+7pVYkku58vFWQ/XUEq+9HnxfSKouxDkljmgWI=
+
+postgresql://neondb_owner:npg_96RdfJwlIzyP@ep-floral-mouse-b54vd50s.c-7.us-east-2.aws.neon.tech/Lifesphere?sslmode=require&channel_binding=require
+
+
+Lifesphere resend api key--re_AUNYjsoi_DmdCLMZKRWavqnWkg1YMoBPq
+
+
+Recovery codes
+Save these somewhere safe. Each works once if you lose your phone.
+
+txhc5-psajk
+j0i4n-k37z7
+wu5mk-qbj3g
+vmhl2-o8vdd
+cumwa-mhc60
+iciej-mtwfu
+ryoll-ocnii
+siaac-kko0m
+k1i8a-uapgp
+niiuu-gl0fn
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

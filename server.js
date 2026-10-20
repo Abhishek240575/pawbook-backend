@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors    = require('cors');
 const app     = express();
+const { helmetConfig, generalLimiter, authLimiter } = require('./src/middleware/security');
 
 app.use(cors());
 app.use(express.json());
@@ -29,6 +30,9 @@ app.use('/api/travel',        require('./routes/travel'));
 app.use('/api/lost-pets',     require('./routes/lostPets'));
 app.use('/api/marketplace',   require('./routes/marketplace'));
 app.use('/api/reviews',       require('./routes/marketplace').reviewsRouter);
+app.use(helmetConfig);
+app.use('/api/v1', generalLimiter);
+app.use('/api/v1/auth', authLimiter);
 
 // ── 404 fallback ──────────────────────────────────
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
