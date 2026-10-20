@@ -8,6 +8,7 @@ const {
 } = require('../middleware');
 
 const authCtrl         = require('../controllers/auth.controller');
+const { forgotPassword, verifyOtp, resetPassword } = require('../controllers/auth.password_reset.controller');
 const userCtrl         = require('../controllers/user.controller');
 const petCtrl          = require('../controllers/pet.controller');
 const postCtrl         = require('../controllers/post.controller');
@@ -58,6 +59,9 @@ authRouter.patch('/password',  authenticate, [
   body('current_password').notEmpty(),
   body('new_password').isLength({ min: 8 }),
 ], validate, authCtrl.changePassword);
+authRouter.post('/forgot-password', forgotPassword);
+authRouter.post('/verify-otp',      verifyOtp);
+authRouter.post('/reset-password',  resetPassword);
 
 router.use('/auth', authRouter);
 
@@ -400,7 +404,7 @@ marketRouter.patch('/cart/:cart_id', authenticate, [
 ], validate, marketCtrl.updateCartItem);
 marketRouter.delete('/cart/:cart_id', authenticate, marketCtrl.removeFromCart);
 
-// -- ORDERS — static routes BEFORE parameterized ---------------
+// -- ORDERS   static routes BEFORE parameterized ---------------
 marketRouter.get('/orders/seller',             authenticate, marketCtrl.getSellerOrders);
 marketRouter.post('/orders', authenticate, [
   body('delivery_address').optional(),
