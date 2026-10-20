@@ -1,4 +1,4 @@
-const router = require('express').Router();
+﻿const router = require('express').Router();
 const { body, param, query } = require('express-validator');
 const marketCtrl = require('../controllers/marketplace.controller');
 
@@ -244,7 +244,6 @@ router.get('/health', async (req, res) => {
 router.use('/pawmatch',      require('./pawmatch'));
 router.use('/vaccinations',  require('./vaccinations'));
 router.use('/reviews',       require('./reviews'));
-router.use('/notifications', require('./notifications'));
 router.use('/insurance',     require('./insurance'));
 router.use('/training',      require('./training'));
 router.use('/travel',        require('./travel'));
