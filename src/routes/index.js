@@ -27,10 +27,11 @@ const notifCtrl        = require('../controllers/notifications.controller');
 const insuranceCtrl    = require('../controllers/insurance.controller');
 const trainingCtrl     = require('../controllers/training.controller');
 const travelCtrl       = require('../controllers/travel.controller');
-const insuranceCtrl    = require('../controllers/insurance.controller');
-const trainingCtrl     = require('../controllers/training.controller');
-const travelCtrl       = require('../controllers/travel.controller');
-const analyticsCtrl    = require('../controllers/analytics.controller');
+
+
+
+
+
 
 // ── AUTH ──────────────────────────────────────────────────────
 const authRouter = require('express').Router();
