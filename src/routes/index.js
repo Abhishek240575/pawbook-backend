@@ -27,7 +27,6 @@ const notifCtrl        = require('../controllers/notifications.controller');
 const insuranceCtrl    = require('../controllers/insurance.controller');
 const trainingCtrl     = require('../controllers/training.controller');
 const travelCtrl       = require('../controllers/travel.controller');
-const analyticsCtrl    = require('../controllers/analytics.controller');
 
 // ── AUTH ──────────────────────────────────────────────────────
 const authRouter = require('express').Router();
@@ -472,18 +471,8 @@ notifRouter.post('/',          authenticate, [body('user_id').notEmpty(), body('
 notifRouter.delete('/:id',     authenticate, notifCtrl.deleteNotification);
 router.use('/notifications', notifRouter);
 
-/**
- * ADD THIS BLOCK to src/routes/index.js
- * Place just before the final module.exports = router line
- *
- * Also add at the TOP of index.js (with other requires):
- *   const insuranceCtrl = require('../controllers/insurance.controller');
- *   const trainingCtrl  = require('../controllers/training.controller');
- *   const travelCtrl    = require('../controllers/travel.controller');
- *   const analyticsCtrl = require('../controllers/analytics.controller');
- */
 
-// ── Insurance ──────────────────────────────────────────────
+// ── Insurance ────────────────────────────────────────────
 const insuranceRouter = require('express').Router();
 insuranceRouter.get('/plans',      insuranceCtrl.getPlans);
 insuranceRouter.get('/my',         authenticate, insuranceCtrl.getMy);
@@ -491,29 +480,22 @@ insuranceRouter.post('/subscribe', authenticate, [body('plan_id').notEmpty()], v
 insuranceRouter.delete('/:id',     authenticate, insuranceCtrl.cancel);
 router.use('/insurance', insuranceRouter);
 
-// ── Training ───────────────────────────────────────────────
+// ── Training ──────────────────────────────────────────────
 const trainingRouter = require('express').Router();
-trainingRouter.get('/programs',              trainingCtrl.getPrograms);
-trainingRouter.get('/programs/:id/lessons',  trainingCtrl.getLessons);
-trainingRouter.get('/my',                    authenticate, trainingCtrl.getMy);
-trainingRouter.post('/enroll',               authenticate, [body('program_id').notEmpty()], validate, trainingCtrl.enroll);
-trainingRouter.patch('/progress/:id',        authenticate, trainingCtrl.updateProgress);
+trainingRouter.get('/programs',             trainingCtrl.getPrograms);
+trainingRouter.get('/programs/:id/lessons', trainingCtrl.getLessons);
+trainingRouter.get('/my',                   authenticate, trainingCtrl.getMy);
+trainingRouter.post('/enroll',              authenticate, [body('program_id').notEmpty()], validate, trainingCtrl.enroll);
+trainingRouter.patch('/progress/:id',       authenticate, trainingCtrl.updateProgress);
 router.use('/training', trainingRouter);
 
-// ── Travel ─────────────────────────────────────────────────
+// ── Travel ────────────────────────────────────────────────
 const travelRouter = require('express').Router();
-travelRouter.get('/destinations',          travelCtrl.getDestinations);
-travelRouter.get('/destinations/:id',      travelCtrl.getDestination);
-travelRouter.get('/saved',                 authenticate, travelCtrl.getMySaved);
-travelRouter.post('/save',                 authenticate, [body('dest_id').notEmpty()], validate, travelCtrl.saveDestination);
-travelRouter.delete('/save/:dest_id',      authenticate, travelCtrl.unsaveDestination);
+travelRouter.get('/destinations',       travelCtrl.getDestinations);
+travelRouter.get('/destinations/:id',   travelCtrl.getDestination);
+travelRouter.get('/saved',              authenticate, travelCtrl.getMySaved);
+travelRouter.post('/save',              authenticate, [body('dest_id').notEmpty()], validate, travelCtrl.saveDestination);
+travelRouter.delete('/save/:dest_id',   authenticate, travelCtrl.unsaveDestination);
 router.use('/travel', travelRouter);
-
-// ── Analytics ──────────────────────────────────────────────
-const analyticsRouter = require('express').Router();
-analyticsRouter.get('/me', authenticate, analyticsCtrl.getMyAnalytics);
-router.use('/analytics', analyticsRouter);
-
-
 
 module.exports = router;
