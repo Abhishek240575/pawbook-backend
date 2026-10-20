@@ -1,11 +1,11 @@
-// controllers/auth.passwordReset.controller.js
+﻿// controllers/auth.passwordReset.controller.js
 // Handles: forgot-password, verify-otp, reset-password
 // Email provider: Resend  (https://resend.com)
 
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { Resend } = require('resend');
-const db = require('../db');           // your existing pg pool
+const { query } = require('../config/db');           // your existing pg pool
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = 'noreply@deemona.com';
@@ -30,7 +30,7 @@ async function forgotPassword(req, res) {
 
   try {
     // Check if user exists — but always return success to prevent email enumeration
-    const userResult = await db.query(
+    const userResult = await query(
       'SELECT user_id FROM users WHERE email = $1',
       [email.toLowerCase()]
     );
@@ -43,7 +43,7 @@ async function forgotPassword(req, res) {
     const userId = userResult.rows[0].id;
 
     // Invalidate any existing unused OTPs for this email
-    await db.query(
+    await query(
       'UPDATE password_reset_otps SET used = TRUE WHERE email = $1 AND used = FALSE',
       [email.toLowerCase()]
     );
@@ -51,7 +51,7 @@ async function forgotPassword(req, res) {
     const otp = generateOtp();
     const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
-    await db.query(
+    await query(
       `INSERT INTO password_reset_otps (user_id, email, otp, expires_at)
        VALUES ($1, $2, $3, $4)`,
       [userId, email.toLowerCase(), otp, expiresAt]
@@ -118,7 +118,7 @@ async function verifyOtp(req, res) {
   }
 
   try {
-    const result = await db.query(
+    const result = await query(
       `SELECT id FROM password_reset_otps
        WHERE email = $1 AND otp = $2 AND used = FALSE AND expires_at > NOW()
        ORDER BY created_at DESC LIMIT 1`,
@@ -133,7 +133,7 @@ async function verifyOtp(req, res) {
     const resetToken = generateToken();
 
     // Store reset token and mark OTP as used
-    await db.query(
+    await query(
       `UPDATE password_reset_otps
        SET reset_token = $1, used = TRUE
        WHERE id = $2`,
@@ -141,7 +141,7 @@ async function verifyOtp(req, res) {
     );
 
     // Give token a 10-minute window for password reset
-    await db.query(
+    await query(
       `UPDATE password_reset_otps
        SET expires_at = NOW() + INTERVAL '10 minutes'
        WHERE id = $1`,
@@ -169,7 +169,7 @@ async function resetPassword(req, res) {
   }
 
   try {
-    const result = await db.query(
+    const result = await query(
       `SELECT user_id FROM password_reset_otps
        WHERE reset_token = $1 AND expires_at > NOW()
        ORDER BY created_at DESC LIMIT 1`,
@@ -184,13 +184,13 @@ async function resetPassword(req, res) {
     const hashedPassword = await bcrypt.hash(new_password, 12);
 
     // Update password
-    await db.query(
+    await query(
       'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
       [hashedPassword, userId]
     );
 
     // Invalidate the token
-    await db.query(
+    await query(
       'UPDATE password_reset_otps SET expires_at = NOW() WHERE reset_token = $1',
       [reset_token]
     );
