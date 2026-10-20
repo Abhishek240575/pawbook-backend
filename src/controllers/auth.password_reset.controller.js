@@ -8,7 +8,7 @@ const { Resend } = require('resend');
 const { query } = require('../config/db');           // your existing pg pool
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM_EMAIL = 'noreply@deemona.com';
+const FROM_EMAIL = 'noreply@mail.deemona.com';
 const OTP_EXPIRY_MINUTES = 15;
 
 // ── helpers ──────────────────────────────────────────────────────
