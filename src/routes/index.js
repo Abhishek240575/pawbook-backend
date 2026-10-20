@@ -491,14 +491,6 @@ router.use('/analytics', analyticsRouter);
  *   const analyticsCtrl = require('../controllers/analytics.controller');
  */
 
-// ── Insurance ──────────────────────────────────────────────
-const insuranceRouter = require('express').Router();
-insuranceRouter.get('/plans',      insuranceCtrl.getPlans);
-insuranceRouter.get('/my',         authenticate, insuranceCtrl.getMy);
-insuranceRouter.post('/subscribe', authenticate, [body('plan_id').notEmpty()], validate, insuranceCtrl.subscribe);
-insuranceRouter.delete('/:id',     authenticate, insuranceCtrl.cancel);
-router.use('/insurance', insuranceRouter);
-
 // ── Training ───────────────────────────────────────────────
 const trainingRouter = require('express').Router();
 trainingRouter.get('/programs',              trainingCtrl.getPrograms);
