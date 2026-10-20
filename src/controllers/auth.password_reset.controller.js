@@ -40,7 +40,7 @@ async function forgotPassword(req, res) {
       return res.json({ success: true, message: 'If that email is registered, an OTP has been sent.' });
     }
 
-    const userId = userResult.rows[0].id;
+    const userId = userResult.rows[0].user_id;
 
     // Invalidate any existing unused OTPs for this email
     await query(
