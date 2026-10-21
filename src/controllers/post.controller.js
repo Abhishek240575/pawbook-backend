@@ -38,21 +38,21 @@ const createPost = async (req, res, next) => {
   } = req.body;
 
   try {
-    // resolve integer user_id from UUID
+    // Resolve numeric user_no from UUID (posts.user_id is INTEGER)
     const { rows: uRows } = await query(
-      `SELECT user_id FROM users WHERE user_id = $1`,
+      `SELECT user_no FROM users WHERE user_id = $1`,
       [req.user.user_id]
     );
-    // posts.user_id is integer — use the numeric surrogate if exists,
-    // otherwise store the UUID text cast to integer via sequence not available;
-    // insert what we have and let DB coerce or fail gracefully
+    if (!uRows.length) return R.unauthorized(res, 'User not found');
+    const numericUserId = uRows[0].user_no;
+
     const { rows } = await query(
       `INSERT INTO posts
          (user_id, content, media_urls, post_type, visibility)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
       [
-        req.user.user_id,   // may need cast — handled below
+        numericUserId,
         postBody || null,
         media_urls.length ? media_urls : null,
         'text',
@@ -67,7 +67,7 @@ const createPost = async (req, res, next) => {
         await query(
           `INSERT INTO media (uploader_id, media_type, url, ref_table, ref_id)
            VALUES ($1, 'image', $2, 'posts', $3)`,
-          [req.user.user_id, url, post.id]
+          [numericUserId, url, post.id]
         );
       }
     } catch (_) { /* media table schema may differ — non-fatal */ }
@@ -77,7 +77,7 @@ const createPost = async (req, res, next) => {
       await query(
         `INSERT INTO activity_log (user_id, activity_type, ref_table, ref_id)
          VALUES ($1, 'post_create', 'posts', $2)`,
-        [req.user.user_id, post.id]
+        [numericUserId, post.id]
       );
     } catch (_) { /* non-fatal */ }
 
@@ -145,9 +145,15 @@ const deletePost = async (req, res, next) => {
 const reactToPost = async (req, res, next) => {
   const { post_id } = req.params;
   try {
+    const { rows: uRows } = await query(
+      `SELECT user_no FROM users WHERE user_id = $1`, [req.user.user_id]
+    );
+    if (!uRows.length) return R.unauthorized(res, 'User not found');
+    const numericUserId = uRows[0].user_no;
+
     const existing = await query(
       `SELECT id FROM likes WHERE user_id = $1 AND post_id = $2`,
-      [req.user.user_id, post_id]
+      [numericUserId, post_id]
     );
     if (existing.rows.length) {
       await query(`DELETE FROM likes WHERE id = $1`, [existing.rows[0].id]);
@@ -156,7 +162,7 @@ const reactToPost = async (req, res, next) => {
     } else {
       await query(
         `INSERT INTO likes (user_id, post_id) VALUES ($1, $2)`,
-        [req.user.user_id, post_id]
+        [numericUserId, post_id]
       );
       await query(`UPDATE posts SET like_count = like_count+1 WHERE id = $1`, [post_id]);
       return R.ok(res, { reacted: true }, 'Liked');
@@ -192,11 +198,17 @@ const addComment = async (req, res, next) => {
   const { body: commentBody } = req.body;
   if (!commentBody?.trim()) return R.badRequest(res, 'Comment body required');
   try {
+    const { rows: uRows } = await query(
+      `SELECT user_no FROM users WHERE user_id = $1`, [req.user.user_id]
+    );
+    if (!uRows.length) return R.unauthorized(res, 'User not found');
+    const numericUserId = uRows[0].user_no;
+
     const { rows } = await query(
       `INSERT INTO comments (post_id, user_id, content)
        VALUES ($1, $2, $3)
        RETURNING *`,
-      [post_id, req.user.user_id, commentBody.trim()]
+      [post_id, numericUserId, commentBody.trim()]
     );
     await query(`UPDATE posts SET comment_count = comment_count+1 WHERE id = $1`, [post_id]);
     return R.created(res, rows[0], 'Comment added');
@@ -207,8 +219,14 @@ const addComment = async (req, res, next) => {
 const deleteComment = async (req, res, next) => {
   const { comment_id } = req.params;
   try {
+    const { rows: uRows } = await query(
+      `SELECT user_no FROM users WHERE user_id = $1`, [req.user.user_id]
+    );
+    if (!uRows.length) return R.unauthorized(res, 'User not found');
+    const numericUserId = uRows[0].user_no;
+
     await query(`DELETE FROM comments WHERE id = $1 AND user_id = $2`,
-      [comment_id, req.user.user_id]);
+      [comment_id, numericUserId]);
     return R.ok(res, null, 'Comment deleted');
   } catch (err) { next(err); }
 };
