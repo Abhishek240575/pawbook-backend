@@ -1,4 +1,4 @@
-﻿const bcrypt = require('bcryptjs');
+const bcrypt = require('bcryptjs');
 const jwt    = require('jsonwebtoken');
 const { query, getClient } = require('../config/db');
 const R      = require('../utils/response');
@@ -97,12 +97,14 @@ const login = async (req, res, next) => {
       [user.user_id, req.ip]
     );
 
-    // Audit log
-    await query(
-      `INSERT INTO "AuditTrail" (actor_id, action, ip_address, user_agent)
-       VALUES ($1, 'user.login', $2, $3)`,
-      [user.user_id, req.ip, req.headers['user-agent']]
-    );
+    // Audit log — non-fatal if table doesn't exist
+    try {
+      await query(
+        `INSERT INTO activity_log (user_id, activity_type)
+         VALUES ($1, 'user.login')`,
+        [user.user_id]
+      );
+    } catch (_) { /* non-fatal */ }
 
     const { password_hash: _, ...safeUser } = user;
     const token   = signToken(user.user_id, user.role);
@@ -150,21 +152,16 @@ const me = async (req, res, next) => {
       `SELECT u.user_id, u.user_no, u.username, u.email, u.full_name,
               u.role, u.status, u.is_verified, u.avatar_url, u.cover_url,
               u.bio, u.city, u.state, u.country, u.created_at,
-              p.notification_prefs, p.privacy_settings, p.theme,
-              COUNT(DISTINCT f_in.follower_id)  AS follower_count,
-              COUNT(DISTINCT f_out.followee_id) AS following_count,
-              COUNT(DISTINCT pet.pet_id)        AS pet_count
+              (SELECT COUNT(*) FROM followers f_in
+                WHERE f_in.followee_id = u.user_no)          AS follower_count,
+              (SELECT COUNT(*) FROM followers f_out
+                WHERE f_out.follower_id = u.user_no)         AS following_count,
+              (SELECT COUNT(*) FROM pets pet
+                WHERE pet.owner_id = u.user_no)              AS pet_count,
+              (SELECT COUNT(*) FROM posts pp
+                WHERE pp.user_id = u.user_no)                AS post_count
          FROM users u
-         LEFT JOIN "Profile" p
-                ON p.user_id = u.user_id
-         LEFT JOIN "Follower" f_in
-                ON f_in.followee_id = u.user_id AND f_in.status = 'accepted'
-         LEFT JOIN "Follower" f_out
-                ON f_out.follower_id = u.user_id AND f_out.status = 'accepted'
-         LEFT JOIN "Pet" pet
-                ON pet.owner_id = u.user_id AND pet.deleted_at IS NULL
-        WHERE u.user_id = $1
-        GROUP BY u.user_id, p.profile_id`,
+        WHERE u.user_id = $1`,
       [req.user.user_id]
     );
     if (!rows.length) return R.notFound(res, 'User not found');
@@ -195,11 +192,13 @@ const changePassword = async (req, res, next) => {
       [hash, req.user.user_id]
     );
 
-    await query(
-      `INSERT INTO "AuditTrail" (actor_id, action)
-       VALUES ($1, 'user.password_changed')`,
-      [req.user.user_id]
-    );
+    try {
+      await query(
+        `INSERT INTO activity_log (user_id, activity_type)
+         VALUES ($1, 'user.password_changed')`,
+        [req.user.user_id]
+      );
+    } catch (_) { /* non-fatal */ }
 
     return R.ok(res, null, 'Password changed successfully');
   } catch (err) {
