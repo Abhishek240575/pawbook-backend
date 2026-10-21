@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const { body, param, query } = require('express-validator');
-const marketCtrl = require('../controllers/marketplace.controller');
+const { uploadImage, uploadAny } = require('../middleware/upload');
+const { uploadFile, uploadMultiple } = require('../controllers/upload.controller');
 
 const {
   authenticate, requireRole, requireVerified,
@@ -28,6 +29,8 @@ const notifCtrl        = require('../controllers/notifications.controller');
 const insuranceCtrl    = require('../controllers/insurance.controller');
 const trainingCtrl     = require('../controllers/training.controller');
 const travelCtrl       = require('../controllers/travel.controller');
+const marketCtrl       = require('../controllers/marketplace.controller');
+
 
 
 
@@ -348,7 +351,12 @@ router.post('/media/albums',        authenticate, mediaCtrl.createAlbum);
 router.get('/media/albums/:id',     authenticate, mediaCtrl.getAlbum);
 router.patch('/media/albums/:id',   authenticate, mediaCtrl.updateAlbum);
 router.delete('/media/albums/:id',  authenticate, mediaCtrl.deleteAlbum);
-router.post('/media/upload',        authenticate, mediaCtrl.uploadMedia);
+
+// Cloudinary upload — single file (image or video, up to 10 MB / 50 MB)
+router.post('/media/upload',          authenticate, uploadAny.single('file'),   uploadFile);
+// Cloudinary upload — multiple files (up to 5)
+router.post('/media/upload-multiple', authenticate, uploadAny.array('files', 5), uploadMultiple);
+
 router.patch('/media/:id',          authenticate, mediaCtrl.updateMedia);
 router.delete('/media/:id',         authenticate, mediaCtrl.deleteMedia);
 
