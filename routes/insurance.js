@@ -4,12 +4,12 @@ const router  = express.Router();
 const { pool } = require('../db');
 const auth    = require('../middleware/auth');
 
-// GET /api/insurance — list all policies for current user
+// GET /api/v1/insurance — list all policies for current user
 router.get('/', auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT i.*, p.name AS pet_name
-       FROM insurance_policies i
+       FROM user_insurance i
        LEFT JOIN pets p ON i.pet_id = p.id
        WHERE i.user_id=$1
        ORDER BY i.created_at DESC`,
@@ -22,7 +22,7 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// POST /api/insurance — add a new policy
+// POST /api/v1/insurance — add a new policy
 router.post('/', auth, async (req, res) => {
   const {
     pet_id, provider, plan_name, policy_number,
@@ -41,7 +41,7 @@ router.post('/', auth, async (req, res) => {
     }
 
     const { rows } = await pool.query(
-      `INSERT INTO insurance_policies
+      `INSERT INTO user_insurance
          (user_id, pet_id, provider, plan_name, policy_number,
           premium, coverage, start_date, end_date)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
@@ -58,7 +58,7 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
-// PUT /api/insurance/:id — update a policy
+// PUT /api/v1/insurance/:id — update a policy
 router.put('/:id', auth, async (req, res) => {
   const {
     provider, plan_name, policy_number,
@@ -67,7 +67,7 @@ router.put('/:id', auth, async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      `UPDATE insurance_policies
+      `UPDATE user_insurance
        SET provider=COALESCE($1,provider),
            plan_name=$2,
            policy_number=$3,
@@ -91,11 +91,11 @@ router.put('/:id', auth, async (req, res) => {
   }
 });
 
-// DELETE /api/insurance/:id — delete a policy
+// DELETE /api/v1/insurance/:id — delete a policy
 router.delete('/:id', auth, async (req, res) => {
   try {
     const { rowCount } = await pool.query(
-      `DELETE FROM insurance_policies WHERE id=$1 AND user_id=$2`,
+      `DELETE FROM user_insurance WHERE id=$1 AND user_id=$2`,
       [req.params.id, req.user.id]
     );
     if (!rowCount) return res.status(404).json({ error: 'Policy not found' });
