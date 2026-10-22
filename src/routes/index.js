@@ -1,4 +1,4 @@
-﻿const router = require('express').Router();
+const router = require('express').Router();
 const { body, param, query } = require('express-validator');
 const { uploadImage, uploadAny } = require('../middleware/upload');
 const { uploadFile, uploadMultiple } = require('../controllers/upload.controller');
@@ -62,6 +62,18 @@ authRouter.patch('/password',  authenticate, [
   body('current_password').notEmpty(),
   body('new_password').isLength({ min: 8 }),
 ], validate, authCtrl.changePassword);
+
+// Email verification
+authRouter.get('/verify-email',         authCtrl.verifyEmail);          // GET ?token=xxx
+authRouter.post('/resend-verification', [
+  body('email').isEmail().normalizeEmail(),
+], validate, authCtrl.resendVerification);
+
+// Google OAuth
+authRouter.post('/google', [
+  body('id_token').notEmpty(),
+], validate, authCtrl.googleAuth);
+
 authRouter.post('/forgot-password', forgotPassword);
 authRouter.post('/verify-otp',      verifyOtp);
 authRouter.post('/reset-password',  resetPassword);
