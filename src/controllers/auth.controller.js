@@ -152,9 +152,9 @@ const me = async (req, res, next) => {
       `SELECT u.user_id, u.user_no, u.username, u.email, u.full_name,
               u.role, u.status, u.is_verified, u.avatar_url, u.cover_url,
               u.bio, u.city, u.state, u.country, u.created_at,
-              (SELECT COUNT(*) FROM followers f_in
-                WHERE f_in.followee_id = u.user_no)          AS follower_count,
-              (SELECT COUNT(*) FROM followers f_out
+              (SELECT COUNT(*) FROM follows f_in
+                WHERE f_in.following_id = u.user_no)          AS follower_count,
+              (SELECT COUNT(*) FROM follows f_out
                 WHERE f_out.follower_id = u.user_no)         AS following_count,
               (SELECT COUNT(*) FROM pets pet
                 WHERE pet.user_id = u.user_no)               AS pet_count,

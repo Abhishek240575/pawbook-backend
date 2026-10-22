@@ -191,7 +191,7 @@ const addVaccination = async (req, res, next) => {
 const getVaccinationsDue = async (req, res, next) => {
   try {
     const { rows } = await query(
-      `SELECT vr.*, p.name AS pet_name, p.avatar_url AS pet_avatar
+      `SELECT vr.*, p.name AS pet_name, p.avatar AS pet_avatar
          FROM pet_vaccinations vr
          JOIN pets p ON p.id = vr.pet_id
          JOIN users u ON u.user_no = p.user_id
