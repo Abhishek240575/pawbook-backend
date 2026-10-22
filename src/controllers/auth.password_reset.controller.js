@@ -1,206 +1,214 @@
-﻿// controllers/auth.passwordReset.controller.js
-// Handles: forgot-password, verify-otp, reset-password
-// Email provider: Resend  (https://resend.com)
+const crypto  = require('crypto');
+const bcrypt   = require('bcryptjs');
+const { query } = require('../config/db');
+const R        = require('../utils/response');
+const logger   = require('../utils/logger');
 
-const crypto = require('crypto');
-const bcrypt = require('bcryptjs');
-const { Resend } = require('resend');
-const { query } = require('../config/db');           // your existing pg pool
+// ── OTP store (in-memory, survives restarts via DB) ───────────────────────────
+// We store OTPs in the DB so they survive Render restarts.
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM_EMAIL = 'onboarding@resend.dev';
-const OTP_EXPIRY_MINUTES = 15;
+async function sendOtpEmail(email, username, otp) {
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto">
+      <div style="background:#2563eb;padding:24px;border-radius:12px 12px 0 0;text-align:center">
+        <h1 style="color:#fff;margin:0;font-size:24px">🐾 PawBook</h1>
+      </div>
+      <div style="background:#fff;padding:32px;border:1px solid #e2e8f0;border-radius:0 0 12px 12px">
+        <h2 style="color:#1e293b;margin:0 0 12px">Password Reset OTP</h2>
+        <p style="color:#64748b;line-height:1.6">Hi <strong>${username}</strong>,<br>
+        Use this 6-digit code to reset your PawBook password:</p>
+        <div style="background:#f1f5f9;border-radius:12px;padding:24px;text-align:center;
+          margin:24px 0;font-size:40px;font-weight:800;letter-spacing:12px;color:#1e293b">
+          ${otp}
+        </div>
+        <p style="color:#94a3b8;font-size:13px">
+          This code expires in <strong>10 minutes</strong>.<br>
+          If you didn't request this, you can safely ignore this email.
+        </p>
+        <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0">
+        <p style="color:#94a3b8;font-size:12px;text-align:center">
+          Deemona Global Solutions · New Delhi 110075, India
+        </p>
+      </div>
+    </div>`;
 
-// ── helpers ──────────────────────────────────────────────────────
-function generateOtp() {
-  return String(Math.floor(100000 + Math.random() * 900000));
-}
-
-function generateToken() {
-  return crypto.randomBytes(32).toString('hex');
-}
-
-// ── POST /auth/forgot-password ───────────────────────────────────
-async function forgotPassword(req, res) {
-  const { email } = req.body;
-
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ success: false, message: 'Valid email is required.' });
-  }
-
-  try {
-    // Check if user exists — but always return success to prevent email enumeration
-    const userResult = await query(
-      'SELECT user_id FROM users WHERE email = $1',
-      [email.toLowerCase()]
-    );
-
-    if (userResult.rows.length === 0) {
-      // Return success anyway — security best practice
-      return res.json({ success: true, message: 'If that email is registered, an OTP has been sent.' });
-    }
-
-    const userId = userResult.rows[0].user_id;
-
-    // Invalidate any existing unused OTPs for this email
-    await query(
-      'UPDATE password_reset_otps SET used = TRUE WHERE email = $1 AND used = FALSE',
-      [email.toLowerCase()]
-    );
-
-    const otp = generateOtp();
-    const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
-
-    await query(
-      `INSERT INTO password_reset_otps (user_id, email, otp, expires_at)
-       VALUES ($1, $2, $3, $4)`,
-      [userId, email.toLowerCase(), otp, expiresAt]
-  // userId is UUID — matches users.user_id type
-    );
-
-    // Send email via Resend
-    await resend.emails.send({
-      from: `PawBook <${FROM_EMAIL}>`,
-      to: email,
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+    },
+    body: JSON.stringify({
+      from:    process.env.SMTP_FROM_EMAIL || 'PawBook <onboarding@resend.dev>',
+      to:      [email],
       subject: 'Your PawBook password reset OTP',
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head><meta charset="UTF-8"></head>
-        <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;margin:0;padding:20px;">
-          <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
-            <!-- Header -->
-            <div style="background:linear-gradient(135deg,#1877F2,#a259ff);padding:32px 24px;text-align:center;">
-              <div style="font-size:40px;margin-bottom:8px;">🐾</div>
-              <h1 style="color:#fff;margin:0;font-size:22px;font-weight:700;">PawBook</h1>
-              <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:14px;">Password Reset</p>
-            </div>
-            <!-- Body -->
-            <div style="padding:32px 28px;">
-              <p style="color:#333;font-size:15px;margin-bottom:8px;">Hi there 👋</p>
-              <p style="color:#555;font-size:14px;line-height:1.6;margin-bottom:28px;">
-                We received a request to reset your PawBook password. Use the OTP below to continue.
-                This code expires in <strong>${OTP_EXPIRY_MINUTES} minutes</strong>.
-              </p>
-              <!-- OTP box -->
-              <div style="background:#f0f4ff;border:1.5px dashed #1877F2;border-radius:12px;padding:20px;text-align:center;margin-bottom:28px;">
-                <div style="font-size:38px;font-weight:800;letter-spacing:10px;color:#1877F2;">${otp}</div>
-                <div style="font-size:12px;color:#888;margin-top:6px;">One-time password — do not share</div>
-              </div>
-              <p style="color:#888;font-size:13px;line-height:1.6;">
-                If you didn't request this, you can safely ignore this email. Your password won't change.
-              </p>
-            </div>
-            <!-- Footer -->
-            <div style="background:#fafafa;padding:16px 28px;text-align:center;border-top:1px solid #f0f0f0;">
-              <p style="color:#bbb;font-size:12px;margin:0;">© ${new Date().getFullYear()} PawBook by Deemona Technologies · India 🇮🇳</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `,
-    });
+      html,
+    }),
+  });
 
-    return res.json({ success: true, message: 'If that email is registered, an OTP has been sent.' });
-
-  } catch (err) {
-    console.error('[forgot-password]', err);
-    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Resend API error ${res.status}: ${err}`);
   }
 }
 
-// ── POST /auth/verify-otp ────────────────────────────────────────
-async function verifyOtp(req, res) {
+// ── FORGOT PASSWORD ───────────────────────────────────────────────────────────
+// POST /api/v1/auth/forgot-password
+// Body: { email }
+const forgotPassword = async (req, res, next) => {
+  const { email } = req.body;
+  if (!email) return R.badRequest(res, 'Email required');
+
+  try {
+    const { rows } = await query(
+      `SELECT user_id, username, email, status FROM users
+        WHERE email = $1 AND deleted_at IS NULL`,
+      [email.toLowerCase()]
+    );
+
+    // Always return success to prevent email enumeration
+    if (!rows.length || rows[0].status === 'suspended') {
+      return R.ok(res, null, 'If that email is registered, an OTP has been sent.');
+    }
+
+    const user = rows[0];
+
+    // Generate 6-digit OTP
+    const otp     = String(Math.floor(100000 + Math.random() * 900000));
+    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Store hashed OTP in DB
+    const otpHash = await bcrypt.hash(otp, 8);
+    await query(
+      `UPDATE users
+          SET reset_otp_hash = $1, reset_otp_expires = $2, updated_at = NOW()
+        WHERE user_id = $3`,
+      [otpHash, expires, user.user_id]
+    );
+
+    // Send OTP email (non-fatal)
+    try {
+      await sendOtpEmail(email, user.username, otp);
+      logger.info('Password reset OTP sent', { user_id: user.user_id });
+    } catch (emailErr) {
+      logger.warn('OTP email failed', { email, error: emailErr.message });
+    }
+
+    return R.ok(res, null, 'If that email is registered, an OTP has been sent.');
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── VERIFY OTP ────────────────────────────────────────────────────────────────
+// POST /api/v1/auth/verify-otp
+// Body: { email, otp }
+// Returns: { reset_token }
+const verifyOtp = async (req, res, next) => {
   const { email, otp } = req.body;
-
-  if (!email || !otp) {
-    return res.status(400).json({ success: false, message: 'Email and OTP are required.' });
-  }
+  if (!email || !otp) return R.badRequest(res, 'Email and OTP required');
 
   try {
-    const result = await query(
-      `SELECT id FROM password_reset_otps
-       WHERE email = $1 AND otp = $2 AND used = FALSE AND expires_at > NOW()
-       ORDER BY created_at DESC LIMIT 1`,
-      [email.toLowerCase(), otp.trim()]
+    const { rows } = await query(
+      `SELECT user_id, reset_otp_hash, reset_otp_expires
+         FROM users
+        WHERE email = $1 AND deleted_at IS NULL`,
+      [email.toLowerCase()]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(400).json({ success: false, message: 'Invalid or expired OTP. Please try again.' });
+    if (!rows.length || !rows[0].reset_otp_hash) {
+      return R.badRequest(res, 'Invalid or expired OTP');
     }
 
-    const rowId = result.rows[0].id;
-    const resetToken = generateToken();
+    const user = rows[0];
 
-    // Store reset token and mark OTP as used
+    // Check expiry
+    if (new Date() > new Date(user.reset_otp_expires)) {
+      return R.badRequest(res, 'OTP has expired. Please request a new one.');
+    }
+
+    // Check OTP
+    const valid = await bcrypt.compare(String(otp), user.reset_otp_hash);
+    if (!valid) {
+      return R.badRequest(res, 'Invalid OTP. Please check and try again.');
+    }
+
+    // Generate a short-lived reset token (15 min)
+    const resetToken        = crypto.randomBytes(32).toString('hex');
+    const resetTokenExpires = new Date(Date.now() + 15 * 60 * 1000);
+
     await query(
-      `UPDATE password_reset_otps
-       SET reset_token = $1, used = TRUE
-       WHERE id = $2`,
-      [resetToken, rowId]
+      `UPDATE users
+          SET reset_otp_hash = NULL, reset_otp_expires = NULL,
+              reset_token = $1, reset_token_expires = $2,
+              updated_at = NOW()
+        WHERE user_id = $3`,
+      [resetToken, resetTokenExpires, user.user_id]
     );
 
-    // Give token a 10-minute window for password reset
-    await query(
-      `UPDATE password_reset_otps
-       SET expires_at = NOW() + INTERVAL '10 minutes'
-       WHERE id = $1`,
-      [rowId]
-    );
-
-    return res.json({ success: true, reset_token: resetToken });
-
+    return R.ok(res, { reset_token: resetToken }, 'OTP verified');
   } catch (err) {
-    console.error('[verify-otp]', err);
-    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
+    next(err);
   }
-}
+};
 
-// ── POST /auth/reset-password ────────────────────────────────────
-async function resetPassword(req, res) {
+// ── RESET PASSWORD ────────────────────────────────────────────────────────────
+// POST /api/v1/auth/reset-password
+// Body: { reset_token, new_password }
+const resetPassword = async (req, res, next) => {
   const { reset_token, new_password } = req.body;
-
   if (!reset_token || !new_password) {
-    return res.status(400).json({ success: false, message: 'Reset token and new password are required.' });
+    return R.badRequest(res, 'Reset token and new password required');
   }
-
   if (new_password.length < 8) {
-    return res.status(400).json({ success: false, message: 'Password must be at least 8 characters.' });
+    return R.badRequest(res, 'Password must be at least 8 characters');
   }
 
   try {
-    const result = await query(
-      `SELECT user_id FROM password_reset_otps
-       WHERE reset_token = $1 AND expires_at > NOW()
-       ORDER BY created_at DESC LIMIT 1`,
+    const { rows } = await query(
+      `SELECT user_id, reset_token_expires
+         FROM users
+        WHERE reset_token = $1 AND deleted_at IS NULL`,
       [reset_token]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(400).json({ success: false, message: 'Invalid or expired reset token. Please start over.' });
+    if (!rows.length) {
+      return R.badRequest(res, 'Invalid or expired reset token');
     }
 
-    const userId = result.rows[0].user_id;
-    const hashedPassword = await bcrypt.hash(new_password, 12);
+    const user = rows[0];
 
-    // Update password
+    if (new Date() > new Date(user.reset_token_expires)) {
+      return R.badRequest(res, 'Reset token has expired. Please start over.');
+    }
+
+    const hash = await bcrypt.hash(new_password, parseInt(process.env.BCRYPT_ROUNDS) || 12);
+
     await query(
-      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE user_id = $2',
-      [hashedPassword, userId]
+      `UPDATE users
+          SET password_hash = $1,
+              reset_token = NULL, reset_token_expires = NULL,
+              is_verified = true,
+              status = CASE WHEN status = 'pending_verify' THEN 'active' ELSE status END,
+              updated_at = NOW()
+        WHERE user_id = $2`,
+      [hash, user.user_id]
     );
 
-    // Invalidate the token
-    await query(
-      'UPDATE password_reset_otps SET expires_at = NOW() WHERE reset_token = $1',
-      [reset_token]
-    );
+    // Log activity
+    try {
+      await query(
+        `INSERT INTO activity_log (user_id, activity_type)
+         VALUES ($1, 'user.password_reset')`,
+        [user.user_id]
+      );
+    } catch (_) { /* non-fatal */ }
 
-    return res.json({ success: true, message: 'Password reset successfully.' });
-
+    logger.info('Password reset successful', { user_id: user.user_id });
+    return R.ok(res, null, 'Password reset successfully. You can now log in.');
   } catch (err) {
-    console.error('[reset-password]', err);
-    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
+    next(err);
   }
-}
+};
 
 module.exports = { forgotPassword, verifyOtp, resetPassword };

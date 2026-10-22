@@ -1,71 +1,132 @@
 // src/controllers/upload.controller.js
-// Handles media upload to Cloudinary via multer-storage-cloudinary
+// Works with middleware/upload.js (multer-storage-cloudinary)
+// Files are already uploaded to Cloudinary by the time these run;
+// req.file.path = secure_url, req.file.filename = public_id
 
-/**
- * POST /api/v1/media/upload
- * Body: multipart/form-data with field "file"
- * Optional query: ?type=avatar|cover|post|pet
- * Returns: { success, url, public_id, resource_type, width, height, format }
- */
-async function uploadFile(req, res) {
+const { deleteFromCloudinary } = require('../middleware/upload');
+const R        = require('../utils/response');
+const logger   = require('../utils/logger');
+const { query } = require('../config/db');
+
+// ── SINGLE FILE UPLOAD ────────────────────────────────────────────────────────
+// POST /api/v1/media/upload
+// Multipart form: file (image or video)
+// Query param: ?type=avatar|cover|post|pet|vet|event  (default: post)
+const uploadFile = async (req, res, next) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ success: false, message: 'No file uploaded.' });
+    if (!req.file) return R.badRequest(res, 'No file provided');
+
+    const type       = req.query.type || 'post';
+    const url        = req.file.path;       // Cloudinary secure_url
+    const public_id  = req.file.filename;   // Cloudinary public_id
+    const resource   = req.file.mimetype?.startsWith('video/') ? 'video' : 'image';
+
+    // Update user avatar / cover URL directly
+    if (type === 'avatar') {
+      // Delete old avatar from Cloudinary (non-fatal)
+      try {
+        const { rows } = await query(
+          `SELECT avatar_url FROM users WHERE user_id = $1`, [req.user.user_id]
+        );
+        if (rows[0]?.avatar_url) await deleteFromCloudinary(rows[0].avatar_url);
+      } catch (_) {}
+
+      await query(
+        `UPDATE users SET avatar_url = $1, updated_at = NOW() WHERE user_id = $2`,
+        [url, req.user.user_id]
+      );
+
+      return R.ok(res, { url, public_id, type: 'avatar' }, 'Avatar updated');
     }
 
-    const file = req.file;
+    if (type === 'cover') {
+      try {
+        const { rows } = await query(
+          `SELECT cover_url FROM users WHERE user_id = $1`, [req.user.user_id]
+        );
+        if (rows[0]?.cover_url) await deleteFromCloudinary(rows[0].cover_url);
+      } catch (_) {}
 
-    // multer-storage-cloudinary stores Cloudinary response in file.path (the secure_url)
-    // and extra fields in file
-    const secure_url   = file.path;           // Cloudinary secure_url
-    const public_id    = file.filename;       // Cloudinary public_id
-    const resource_type = file.resource_type || 'image';
-    const width        = file.width  || null;
-    const height       = file.height || null;
-    const format       = file.format || null;
+      await query(
+        `UPDATE users SET cover_url = $1, updated_at = NOW() WHERE user_id = $2`,
+        [url, req.user.user_id]
+      );
 
-    return res.status(201).json({
-      success:       true,
-      url:           secure_url,
+      return R.ok(res, { url, public_id, type: 'cover' }, 'Cover photo updated');
+    }
+
+    // For post / pet / vet / event — save to media table
+    let mediaRow = null;
+    try {
+      const { rows } = await query(
+        `INSERT INTO media
+           (user_id, media_type, url, thumbnail_url, size_bytes, original_filename, public_id)
+         VALUES ($1, $2, $3, $3, $4, $5, $6)
+         RETURNING *`,
+        [
+          req.user.user_id,
+          resource,
+          url,
+          req.file.size || null,
+          req.file.originalname || null,
+          public_id,
+        ]
+      );
+      mediaRow = rows[0];
+    } catch (_) { /* non-fatal if media table missing */ }
+
+    logger.info('File uploaded', { user_id: req.user.user_id, type, public_id });
+
+    return R.ok(res, {
+      url,
       public_id,
-      resource_type,
-      width,
-      height,
-      format,
-    });
+      resource_type: resource,
+      media_id: mediaRow?.media_id || null,
+    }, 'Upload successful');
 
   } catch (err) {
-    console.error('[upload:uploadFile]', err);
-    return res.status(500).json({ success: false, message: 'Upload failed. Please try again.' });
+    logger.error('Upload failed', { error: err.message });
+    next(err);
   }
-}
+};
 
-/**
- * POST /api/v1/media/upload-multiple
- * Body: multipart/form-data with field "files" (up to 5)
- * Returns: { success, files: [{ url, public_id, ... }] }
- */
-async function uploadMultiple(req, res) {
+// ── MULTIPLE FILES UPLOAD ─────────────────────────────────────────────────────
+// POST /api/v1/media/upload-multiple
+// Multipart form: files[] (up to 5 images/videos)
+const uploadMultiple = async (req, res, next) => {
   try {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ success: false, message: 'No files uploaded.' });
-    }
+    if (!req.files || !req.files.length) return R.badRequest(res, 'No files provided');
 
-    const results = req.files.map(file => ({
-      url:           file.path,
-      public_id:     file.filename,
-      resource_type: file.resource_type || 'image',
-      width:         file.width  || null,
-      height:        file.height || null,
-      format:        file.format || null,
+    const files = req.files.map(f => ({
+      url:           f.path,
+      public_id:     f.filename,
+      resource_type: f.mimetype?.startsWith('video/') ? 'video' : 'image',
+      original_name: f.originalname,
     }));
 
-    return res.status(201).json({ success: true, files: results });
+    // Save all to media table (non-fatal)
+    const mediaIds = [];
+    for (const f of files) {
+      try {
+        const { rows } = await query(
+          `INSERT INTO media (user_id, media_type, url, thumbnail_url, original_filename, public_id)
+           VALUES ($1, $2, $3, $3, $4, $5) RETURNING media_id`,
+          [req.user.user_id, f.resource_type, f.url, f.original_name, f.public_id]
+        );
+        mediaIds.push(rows[0].media_id);
+      } catch (_) {}
+    }
+
+    return R.ok(res, {
+      files,
+      media_ids: mediaIds,
+      count: files.length,
+    }, 'Files uploaded');
 
   } catch (err) {
-    console.error('[upload:uploadMultiple]', err);
-    return res.status(500).json({ success: false, message: 'Upload failed. Please try again.' });
+    logger.error('Multiple upload failed', { error: err.message });
+    next(err);
   }
-}
+};
 
 module.exports = { uploadFile, uploadMultiple };
