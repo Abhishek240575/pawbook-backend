@@ -3,46 +3,47 @@ const jwt    = require('jsonwebtoken');
 const { query, getClient } = require('../config/db');
 const R      = require('../utils/response');
 const logger = require('../utils/logger');
-const nodemailer = require('nodemailer');
-
-// ── EMAIL TRANSPORTER ──────────────────────────────────────────────────────────
-const transporter = nodemailer.createTransport({
-  host:   process.env.SMTP_HOST   || 'smtp.gmail.com',
-  port:   parseInt(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
-
+// ── EMAIL via Resend HTTP API (no SMTP — works on Render free tier) ───────────
 async function sendVerificationEmail(email, username, token) {
-  const link = `${process.env.API_URL || 'https://pawbook-api-cquc.onrender.com'}/api/auth/verify-email?token=${token}`;
-  await transporter.sendMail({
-    from: `"PawBook" <${process.env.SMTP_USER}>`,
-    to: email,
-    subject: 'Verify your PawBook account',
-    html: `
-      <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto">
-        <div style="background:#2563eb;padding:24px;border-radius:12px 12px 0 0;text-align:center">
-          <h1 style="color:#fff;margin:0;font-size:24px">🐾 PawBook</h1>
-        </div>
-        <div style="background:#fff;padding:32px;border:1px solid #e2e8f0;border-radius:0 0 12px 12px">
-          <h2 style="color:#1e293b;margin:0 0 12px">Hi ${username}! Welcome to PawBook 🎉</h2>
-          <p style="color:#64748b;line-height:1.6">Please verify your email address to activate your account.</p>
-          <a href="${link}" style="display:inline-block;margin:24px 0;padding:14px 32px;
-            background:#2563eb;color:#fff;border-radius:8px;text-decoration:none;
-            font-weight:700;font-size:16px">Verify Email Address</a>
-          <p style="color:#94a3b8;font-size:13px">This link expires in 24 hours.<br>
-          If you didn't sign up, you can safely ignore this email.</p>
-          <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0">
-          <p style="color:#94a3b8;font-size:12px;text-align:center">
-            Deemona Global Solutions · New Delhi 110075, India
-          </p>
-        </div>
+  const link = `${process.env.API_URL || 'https://pawbook-api-cquc.onrender.com'}/api/v1/auth/verify-email?token=${token}`;
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto">
+      <div style="background:#2563eb;padding:24px;border-radius:12px 12px 0 0;text-align:center">
+        <h1 style="color:#fff;margin:0;font-size:24px">🐾 PawBook</h1>
       </div>
-    `,
+      <div style="background:#fff;padding:32px;border:1px solid #e2e8f0;border-radius:0 0 12px 12px">
+        <h2 style="color:#1e293b;margin:0 0 12px">Hi ${username}! Welcome to PawBook 🎉</h2>
+        <p style="color:#64748b;line-height:1.6">Please verify your email address to activate your account.</p>
+        <a href="${link}" style="display:inline-block;margin:24px 0;padding:14px 32px;
+          background:#2563eb;color:#fff;border-radius:8px;text-decoration:none;
+          font-weight:700;font-size:16px">Verify Email Address</a>
+        <p style="color:#94a3b8;font-size:13px">This link expires in 24 hours.<br>
+        If you didn't sign up, you can safely ignore this email.</p>
+        <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0">
+        <p style="color:#94a3b8;font-size:12px;text-align:center">
+          Deemona Global Solutions · New Delhi 110075, India
+        </p>
+      </div>
+    </div>`;
+
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+    },
+    body: JSON.stringify({
+      from: process.env.SMTP_FROM_EMAIL || 'PawBook <onboarding@resend.dev>',
+      to:   [email],
+      subject: 'Verify your PawBook account',
+      html,
+    }),
   });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Resend API error ${res.status}: ${err}`);
+  }
 }
 
 // ── IN-MEMORY RATE LIMITER ─────────────────────────────────────────────────────
