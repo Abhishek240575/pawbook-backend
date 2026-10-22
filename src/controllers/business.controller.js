@@ -1,6 +1,6 @@
-const { pool } = require('../config/db');
+﻿const { query } = require('../config/db');
 
-// ── LIST approved businesses (with optional city/category filter) ──────────
+// â”€â”€ LIST approved businesses (with optional city/category filter) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function listBusinesses(req, res) {
   try {
     const { city, category, lat, lng, radius = 50 } = req.query;
@@ -48,7 +48,7 @@ async function listBusinesses(req, res) {
       LIMIT 200
     `;
 
-    const { rows } = await pool.query(sql, params);
+    const { rows } = await query(sql, params);
     res.json({ success: true, businesses: rows });
   } catch (err) {
     console.error('listBusinesses error:', err);
@@ -56,7 +56,7 @@ async function listBusinesses(req, res) {
   }
 }
 
-// ── REGISTER a new business ────────────────────────────────────────────────
+// â”€â”€ REGISTER a new business â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function registerBusiness(req, res) {
   try {
     const userId = req.user?.user_id || null;
@@ -75,7 +75,7 @@ async function registerBusiness(req, res) {
       return res.status(400).json({ success: false, message: 'Invalid category' });
     }
 
-    const { rows } = await pool.query(`
+    const { rows } = await query(`
       INSERT INTO pet_businesses
         (owner_id, name, category, description, address, city, state, country,
          pincode, lat, lng, phone, email, website, opening_hours,
@@ -102,7 +102,7 @@ async function registerBusiness(req, res) {
   }
 }
 
-// ── ADMIN: approve / reject ────────────────────────────────────────────────
+// â”€â”€ ADMIN: approve / reject â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function moderateBusiness(req, res) {
   try {
     if (req.user?.role !== 'admin') {
@@ -115,7 +115,7 @@ async function moderateBusiness(req, res) {
     }
     const status = action === 'approve' ? 'approved' : 'rejected';
     const verified = action === 'approve';
-    const { rows } = await pool.query(
+    const { rows } = await query(
       `UPDATE pet_businesses SET status=$1, verified=$2 WHERE business_id=$3 RETURNING business_id, name, status`,
       [status, verified, business_id]
     );
@@ -127,13 +127,13 @@ async function moderateBusiness(req, res) {
   }
 }
 
-// ── ADMIN: list pending ────────────────────────────────────────────────────
+// â”€â”€ ADMIN: list pending â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function listPending(req, res) {
   try {
     if (req.user?.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Admin only' });
     }
-    const { rows } = await pool.query(
+    const { rows } = await query(
       `SELECT * FROM pet_businesses WHERE status='pending' ORDER BY created_at ASC LIMIT 100`
     );
     res.json({ success: true, businesses: rows });
