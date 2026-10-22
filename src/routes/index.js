@@ -1,4 +1,4 @@
-const router = require('express').Router();
+﻿const router = require('express').Router();
 const { body, param, query } = require('express-validator');
 const { uploadImage, uploadAny } = require('../middleware/upload');
 const { uploadFile, uploadMultiple } = require('../controllers/upload.controller');
@@ -353,9 +353,9 @@ router.get('/media/albums/:id',     authenticate, mediaCtrl.getAlbum);
 router.patch('/media/albums/:id',   authenticate, mediaCtrl.updateAlbum);
 router.delete('/media/albums/:id',  authenticate, mediaCtrl.deleteAlbum);
 
-// Cloudinary upload — single file (image or video, up to 10 MB / 50 MB)
+// Cloudinary upload â€” single file (image or video, up to 10 MB / 50 MB)
 router.post('/media/upload',          authenticate, uploadAny.single('file'),   uploadFile);
-// Cloudinary upload — multiple files (up to 5)
+// Cloudinary upload â€” multiple files (up to 5)
 router.post('/media/upload-multiple', authenticate, uploadAny.array('files', 5), uploadMultiple);
 
 router.patch('/media/:id',          authenticate, mediaCtrl.updateMedia);
@@ -494,3 +494,4 @@ router.use('/analytics', analyticsRouter);
 
 
 module.exports = router;
+
