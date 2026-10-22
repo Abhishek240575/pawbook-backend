@@ -129,7 +129,7 @@ const getHealthTimeline = async (req, res, next) => {
         `SELECT 'vaccination' AS type, vaccine_name AS title,
                 given_date AS date, next_due_date AS next_due_at,
                 clinic_name
-           FROM vaccinations
+           FROM pet_vaccinations
           WHERE pet_id = $1
           ORDER BY given_date DESC`,
         [pet_id]
@@ -138,7 +138,7 @@ const getHealthTimeline = async (req, res, next) => {
         `SELECT 'appointment' AS type,
                 appointment_type AS title, scheduled_at AS date,
                 status, vet_notes
-           FROM appointments
+           FROM vet_appointments
           WHERE pet_id = $1
           ORDER BY scheduled_at DESC`,
         [pet_id]
@@ -171,7 +171,7 @@ const addVaccination = async (req, res, next) => {
     if (!own.rows.length) return R.forbidden(res, 'Not your pet');
 
     const { rows } = await query(
-      `INSERT INTO vaccinations
+      `INSERT INTO pet_vaccinations
          (pet_id, user_id, vaccine_name, given_date, next_due_date,
           vet_name, clinic_name, batch_number, notes, doc_url)
        VALUES ($1,
@@ -192,7 +192,7 @@ const getVaccinationsDue = async (req, res, next) => {
   try {
     const { rows } = await query(
       `SELECT vr.*, p.name AS pet_name, p.avatar_url AS pet_avatar
-         FROM vaccinations vr
+         FROM pet_vaccinations vr
          JOIN pets p ON p.id = vr.pet_id
          JOIN users u ON u.user_no = p.user_id
         WHERE u.user_id = $1
