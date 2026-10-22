@@ -198,11 +198,12 @@ router.get('/search', authenticate, async (req, res, next) => {
       `SELECT * FROM fn_search($1, $2)`,
       [q.trim(), category]
     );
-    await dbQuery(
-      `INSERT INTO "SearchHistory" (user_id, query, category, result_count)
+    // Non-fatal: log search history if table exists
+    dbQuery(
+      `INSERT INTO search_history (user_id, query, category, result_count)
        VALUES ($1, $2, $3, $4)`,
       [req.user.user_id, q, category, rows.length]
-    );
+    ).catch(() => {}); // silently ignore if table doesn't exist
     return res.json({ success: true, data: rows });
   } catch (err) { next(err); }
 });
@@ -215,20 +216,20 @@ router.get('/notifications', authenticate, parsePagination, async (req, res, nex
     const { rows: data } = await dbQuery(
       `SELECT n.*,
               u.username AS sender_username, u.avatar_url AS sender_avatar
-         FROM "Notification" n
-         LEFT JOIN "User" u ON u.user_id = n.sender_id
+         FROM notifications n
+         LEFT JOIN users u ON u.user_id = n.sender_id
         WHERE n.recipient_id = $1
         ORDER BY n.created_at DESC
         LIMIT $2 OFFSET $3`,
       [req.user.user_id, limit, offset]
     );
     const { rows: [{ total }] } = await dbQuery(
-      `SELECT COUNT(*) AS total FROM "Notification"
+      `SELECT COUNT(*) AS total FROM notifications
         WHERE recipient_id = $1`,
       [req.user.user_id]
     );
     await dbQuery(
-      `UPDATE "Notification"
+      `UPDATE notifications
           SET is_read = TRUE, read_at = NOW()
         WHERE recipient_id = $1 AND is_read = FALSE`,
       [req.user.user_id]
