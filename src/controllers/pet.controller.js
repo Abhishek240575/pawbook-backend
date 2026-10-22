@@ -4,24 +4,25 @@ const R = require('../utils/response');
 // ── CREATE PET ────────────────────────────────────────────────
 const createPet = async (req, res, next) => {
   const {
-    name, species, breed, mixed_breed, gender,
-    date_of_birth, weight_kg, size, color,
-    microchip_id, bio, avatar_url
+    name, species, breed, gender,
+    age, weight, color, bio, avatar,
+    is_vaccinated, is_neutered, microchip
   } = req.body;
   try {
     const { rows } = await query(
       `INSERT INTO pets
-         (user_id, name, species, breed, mixed_breed, gender,
-          date_of_birth, weight_kg, size, color, microchip_id, bio, avatar_url)
+         (user_id, name, species, breed, gender,
+          age, weight, color, bio, avatar,
+          is_vaccinated, is_neutered, microchip)
        VALUES (
          (SELECT user_no FROM users WHERE user_id=$1),
          $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        RETURNING *`,
       [req.user.user_id, name, species, breed || null,
-       mixed_breed || false, gender || 'unknown',
-       date_of_birth || null, weight_kg || null,
-       size || null, color || null,
-       microchip_id || null, bio || null, avatar_url || null]
+       gender || 'unknown', age || null, weight || null,
+       color || null, bio || null, avatar || null,
+       is_vaccinated || false, is_neutered || false,
+       microchip || null]
     );
     return R.created(res, rows[0], 'Pet profile created');
   } catch (err) { next(err); }
@@ -62,8 +63,8 @@ const getPet = async (req, res, next) => {
 const updatePet = async (req, res, next) => {
   const { pet_id } = req.params;
   const {
-    name, breed, gender, date_of_birth, weight_kg,
-    size, color, bio, avatar_url, cover_url
+    name, breed, gender, age, weight,
+    color, bio, avatar, is_vaccinated, is_neutered, microchip
   } = req.body;
   try {
     // Ownership check
@@ -83,24 +84,25 @@ const updatePet = async (req, res, next) => {
           SET name          = COALESCE($1, name),
               breed         = COALESCE($2, breed),
               gender        = COALESCE($3, gender),
-              date_of_birth = COALESCE($4, date_of_birth),
-              weight_kg     = COALESCE($5, weight_kg),
-              size          = COALESCE($6, size),
-              color         = COALESCE($7, color),
-              bio           = COALESCE($8, bio),
-              avatar_url    = COALESCE($9, avatar_url),
-              cover_url     = COALESCE($10, cover_url),
+              age           = COALESCE($4, age),
+              weight        = COALESCE($5, weight),
+              color         = COALESCE($6, color),
+              bio           = COALESCE($7, bio),
+              avatar        = COALESCE($8, avatar),
+              is_vaccinated = COALESCE($9, is_vaccinated),
+              is_neutered   = COALESCE($10, is_neutered),
+              microchip     = COALESCE($11, microchip),
               updated_at    = NOW()
-        WHERE id = $11
+        WHERE id = $12
         RETURNING *`,
-      [name, breed, gender, date_of_birth, weight_kg,
-       size, color, bio, avatar_url, cover_url, pet_id]
+      [name, breed, gender, age, weight,
+       color, bio, avatar, is_vaccinated, is_neutered, microchip, pet_id]
     );
     return R.ok(res, rows[0], 'Pet updated');
   } catch (err) { next(err); }
 };
 
-// ── DELETE PET (soft) ─────────────────────────────────────────
+// ── DELETE PET ────────────────────────────────────────────────
 const deletePet = async (req, res, next) => {
   const { pet_id } = req.params;
   try {
@@ -128,7 +130,7 @@ const getHealthTimeline = async (req, res, next) => {
       query(
         `SELECT 'vaccination' AS type, vaccine_name AS title,
                 given_date AS date, next_due_date AS next_due_at,
-                clinic_name
+                vet_name AS clinic_name
            FROM pet_vaccinations
           WHERE pet_id = $1
           ORDER BY given_date DESC`,
@@ -136,11 +138,12 @@ const getHealthTimeline = async (req, res, next) => {
       ),
       query(
         `SELECT 'appointment' AS type,
-                appointment_type AS title, scheduled_at AS date,
-                status, vet_notes
+                consult_type AS title,
+                appt_date AS date,
+                status, notes AS vet_notes
            FROM vet_appointments
           WHERE pet_id = $1
-          ORDER BY scheduled_at DESC`,
+          ORDER BY appt_date DESC`,
         [pet_id]
       )
     ]);
@@ -158,7 +161,7 @@ const addVaccination = async (req, res, next) => {
   const { pet_id } = req.params;
   const {
     vaccine_name, given_date, next_due_date,
-    vet_name, clinic_name, batch_number, notes, doc_url
+    vet_name, batch_number, notes, reminder_set
   } = req.body;
   try {
     // Ownership check
@@ -173,15 +176,15 @@ const addVaccination = async (req, res, next) => {
     const { rows } = await query(
       `INSERT INTO pet_vaccinations
          (pet_id, user_id, vaccine_name, given_date, next_due_date,
-          vet_name, clinic_name, batch_number, notes, doc_url)
+          vet_name, batch_number, notes, reminder_set)
        VALUES ($1,
          (SELECT user_no FROM users WHERE user_id=$2),
-         $3,$4,$5,$6,$7,$8,$9,$10)
+         $3,$4,$5,$6,$7,$8,$9)
        RETURNING *`,
       [pet_id, req.user.user_id,
        vaccine_name, given_date, next_due_date || null,
-       vet_name || null, clinic_name || null,
-       batch_number || null, notes || null, doc_url || null]
+       vet_name || null, batch_number || null,
+       notes || null, reminder_set || false]
     );
     return R.created(res, rows[0], 'Vaccination recorded');
   } catch (err) { next(err); }
