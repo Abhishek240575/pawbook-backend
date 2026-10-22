@@ -1,199 +1,199 @@
-/* ==========================================================================
-   PAWBOOK  socket.js  — Socket.io real-time client
-   Connects to backend wss://pawbook-api-cquc.onrender.com
-   Provides:
-     PawSocket.connect()          — call once after login
-     PawSocket.disconnect()
-     PawSocket.on(event, fn)      — subscribe to server events
-     PawSocket.off(event, fn)
-     PawSocket.emit(event, data)  — send to server
-     PawSocket.sendMessage(conversationId, content)
-     PawSocket.joinConversation(conversationId)
-     PawSocket.leaveConversation(conversationId)
-     PawSocket.isConnected()
+// src/socket.js  —  Socket.io server for PawBook
+// Attach to Express HTTP server, handles:
+//   - Auth via JWT
+//   - Real-time messages (1:1 conversations)
+//   - Real-time notifications
+//   - Typing indicators
+//   - Online presence
 
-   Server events you can listen to:
-     'new_message'      → { conversation_id, message: {...} }
-     'new_notification' → { notification: {...} }
-     'user_online'      → { user_id }
-     'user_offline'     → { user_id }
-     'typing'           → { conversation_id, user_id, is_typing }
-   ========================================================================== */
+const { Server }  = require('socket.io');
+const jwt         = require('jsonwebtoken');
+const { query }   = require('./config/db');
+const logger      = require('./utils/logger');
 
-(function (global) {
-  'use strict';
+// Map: user_id → Set<socket.id>
+const onlineUsers = new Map();
 
-  const SOCKET_URL = 'https://pawbook-api-cquc.onrender.com';
+function initSocket(httpServer) {
+  const io = new Server(httpServer, {
+    cors: {
+      origin: [
+        'https://pawbook-frontend-cyxo.onrender.com',
+        'http://localhost:3000',
+        'http://localhost:62814',
+        'http://127.0.0.1:5500',
+      ],
+      credentials: true,
+    },
+    pingTimeout:  60000,
+    pingInterval: 25000,
+  });
 
-  let _socket = null;
-  let _listeners = {};
-  let _reconnectTimer = null;
-  let _notifBadge = 0;
+  // ── Auth middleware ──────────────────────────────────────────────────────────
+  io.use(async (socket, next) => {
+    try {
+      const token = socket.handshake.auth?.token
+                 || socket.handshake.headers?.authorization?.replace('Bearer ', '');
+      if (!token) return next(new Error('No token'));
 
-  function _token() {
-    return localStorage.getItem('pb_token') || localStorage.getItem('token') || '';
-  }
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      socket.user_id = decoded.user_id || decoded.id;
+      socket.role    = decoded.role || 'user';
+      next();
+    } catch (err) {
+      next(new Error('Invalid token'));
+    }
+  });
 
-  function _loadSocketIO(cb) {
-    if (typeof io !== 'undefined') return cb();
-    const s = document.createElement('script');
-    s.src = 'https://cdn.socket.io/4.7.5/socket.io.min.js';
-    s.onload = cb;
-    s.onerror = () => console.warn('[PawSocket] Could not load socket.io');
-    document.head.appendChild(s);
-  }
+  // ── Connection ───────────────────────────────────────────────────────────────
+  io.on('connection', (socket) => {
+    const uid = socket.user_id;
+    logger.info(`[Socket] Connected: user=${uid} socket=${socket.id}`);
 
-  const PawSocket = {
-    connect() {
-      _loadSocketIO(() => {
-        if (_socket && _socket.connected) return;
+    // Track online
+    if (!onlineUsers.has(uid)) onlineUsers.set(uid, new Set());
+    onlineUsers.get(uid).add(socket.id);
 
-        _socket = io(SOCKET_URL, {
-          transports: ['websocket', 'polling'],
-          auth: { token: _token() },
-          reconnectionDelay: 2000,
-          reconnectionAttempts: 10,
+    // Join personal notification room
+    socket.join(`user:${uid}`);
+
+    // Broadcast online status to followers (non-blocking)
+    broadcastPresence(io, uid, true);
+
+    // ── Events ──────────────────────────────────────────────────────────────────
+
+    socket.on('join_conversation', ({ conversation_id }) => {
+      if (!conversation_id) return;
+      socket.join(`conv:${conversation_id}`);
+    });
+
+    socket.on('leave_conversation', ({ conversation_id }) => {
+      if (!conversation_id) return;
+      socket.leave(`conv:${conversation_id}`);
+    });
+
+    socket.on('send_message', async ({ conversation_id, content }) => {
+      if (!conversation_id || !content?.trim()) return;
+      try {
+        // Persist to DB
+        const { rows } = await query(
+          `INSERT INTO messages (conversation_id, sender_id, content, created_at)
+           VALUES ($1, $2, $3, NOW()) RETURNING *`,
+          [conversation_id, uid, content.trim()]
+        );
+        const msg = rows[0];
+
+        // Emit to all participants in the conversation room
+        io.to(`conv:${conversation_id}`).emit('new_message', {
+          conversation_id,
+          message: {
+            message_id:      msg.message_id,
+            conversation_id: msg.conversation_id,
+            sender_id:       msg.sender_id,
+            content:         msg.content,
+            created_at:      msg.created_at,
+          },
         });
 
-        _socket.on('connect', () => {
-          console.log('[PawSocket] Connected:', _socket.id);
-          _emit_local('connect');
-        });
+        // Notify recipients who may not be in the room
+        await notifyConversationParticipants(io, conversation_id, uid, msg);
+      } catch (err) {
+        logger.error('[Socket] send_message error', { error: err.message });
+        socket.emit('error', { message: 'Message delivery failed' });
+      }
+    });
 
-        _socket.on('disconnect', (reason) => {
-          console.log('[PawSocket] Disconnected:', reason);
-          _emit_local('disconnect', reason);
-        });
-
-        _socket.on('connect_error', (err) => {
-          console.warn('[PawSocket] Connection error:', err.message);
-        });
-
-        // ── Server events → forward to local listeners ──────────────────────
-
-        _socket.on('new_message', (data) => {
-          _emit_local('new_message', data);
-          // Update chat UI if open
-          if (typeof onNewMessage === 'function') onNewMessage(data);
-        });
-
-        _socket.on('new_notification', (data) => {
-          _emit_local('new_notification', data);
-          _notifBadge++;
-          _updateNotifBadge(_notifBadge);
-          if (typeof onNewNotification === 'function') onNewNotification(data);
-        });
-
-        _socket.on('user_online', (data) => _emit_local('user_online', data));
-        _socket.on('user_offline', (data) => _emit_local('user_offline', data));
-
-        _socket.on('typing', (data) => {
-          _emit_local('typing', data);
-          _showTypingIndicator(data);
-        });
-
-        _socket.on('message_read', (data) => _emit_local('message_read', data));
-        _socket.on('post_liked',   (data) => _emit_local('post_liked', data));
+    socket.on('typing', ({ conversation_id, is_typing }) => {
+      if (!conversation_id) return;
+      socket.to(`conv:${conversation_id}`).emit('typing', {
+        conversation_id,
+        user_id:  uid,
+        is_typing: !!is_typing,
       });
-    },
-
-    disconnect() {
-      if (_socket) { _socket.disconnect(); _socket = null; }
-    },
-
-    on(event, fn) {
-      if (!_listeners[event]) _listeners[event] = [];
-      _listeners[event].push(fn);
-    },
-
-    off(event, fn) {
-      if (!_listeners[event]) return;
-      _listeners[event] = _listeners[event].filter(f => f !== fn);
-    },
-
-    emit(event, data) {
-      if (_socket && _socket.connected) _socket.emit(event, data);
-      else console.warn('[PawSocket] Not connected — cannot emit', event);
-    },
-
-    isConnected() {
-      return !!(_socket && _socket.connected);
-    },
-
-    // ── Conversation helpers ─────────────────────────────────────────────────
-
-    joinConversation(conversationId) {
-      this.emit('join_conversation', { conversation_id: conversationId });
-    },
-
-    leaveConversation(conversationId) {
-      this.emit('leave_conversation', { conversation_id: conversationId });
-    },
-
-    sendMessage(conversationId, content) {
-      this.emit('send_message', { conversation_id: conversationId, content });
-    },
-
-    sendTyping(conversationId, isTyping) {
-      this.emit('typing', { conversation_id: conversationId, is_typing: isTyping });
-    },
-
-    markRead(conversationId) {
-      this.emit('mark_read', { conversation_id: conversationId });
-    },
-
-    resetNotifBadge() {
-      _notifBadge = 0;
-      _updateNotifBadge(0);
-    },
-  };
-
-  // ── Internal helpers ───────────────────────────────────────────────────────
-
-  function _emit_local(event, data) {
-    (_listeners[event] || []).forEach(fn => { try { fn(data); } catch(_) {} });
-  }
-
-  function _updateNotifBadge(count) {
-    // Update any .notif-dot or .notif-count elements on the page
-    document.querySelectorAll('.notif-count,[data-notif-count]').forEach(el => {
-      el.textContent = count > 99 ? '99+' : count || '';
-      el.style.display = count ? '' : 'none';
     });
-    document.querySelectorAll('.notif-dot').forEach(el => {
-      el.style.display = count ? '' : 'none';
+
+    socket.on('mark_read', async ({ conversation_id }) => {
+      if (!conversation_id) return;
+      try {
+        await query(
+          `UPDATE messages SET read_at = NOW()
+           WHERE conversation_id = $1 AND sender_id != $2 AND read_at IS NULL`,
+          [conversation_id, uid]
+        );
+        socket.to(`conv:${conversation_id}`).emit('message_read', {
+          conversation_id,
+          read_by: uid,
+        });
+      } catch (_) {}
     });
-    // Browser tab title
-    if (count > 0) {
-      const base = document.title.replace(/^\(\d+\)\s*/, '');
-      document.title = `(${count}) ${base}`;
-    } else {
-      document.title = document.title.replace(/^\(\d+\)\s*/, '');
-    }
-  }
 
-  function _showTypingIndicator(data) {
-    const el = document.getElementById('typing-indicator-' + data.conversation_id);
-    if (!el) return;
-    if (data.is_typing) {
-      el.style.display = 'block';
-      clearTimeout(el._hideTimer);
-      el._hideTimer = setTimeout(() => { el.style.display = 'none'; }, 3000);
-    } else {
-      el.style.display = 'none';
-    }
-  }
+    // ── Disconnect ─────────────────────────────────────────────────────────────
 
-  // Auto-connect when logged in
-  if (typeof localStorage !== 'undefined' && localStorage.getItem('pb_token')) {
-    // Defer so api.js has loaded first
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => PawSocket.connect());
-    } else {
-      setTimeout(() => PawSocket.connect(), 100);
-    }
-  }
+    socket.on('disconnect', () => {
+      const sockets = onlineUsers.get(uid);
+      if (sockets) {
+        sockets.delete(socket.id);
+        if (sockets.size === 0) {
+          onlineUsers.delete(uid);
+          broadcastPresence(io, uid, false);
+        }
+      }
+      logger.info(`[Socket] Disconnected: user=${uid} socket=${socket.id}`);
+    });
+  });
 
-  global.PawSocket = PawSocket;
+  return io;
+}
 
-})(window);
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+async function broadcastPresence(io, userId, isOnline) {
+  try {
+    // Get followers/following to notify
+    const { rows } = await query(
+      `SELECT follower_id AS uid FROM follows WHERE following_id = $1
+       UNION
+       SELECT following_id AS uid FROM follows WHERE follower_id = $1`,
+      [userId]
+    );
+    rows.forEach(r => {
+      io.to(`user:${r.uid}`).emit(isOnline ? 'user_online' : 'user_offline', {
+        user_id: userId,
+      });
+    });
+  } catch (_) {}
+}
+
+async function notifyConversationParticipants(io, conversationId, senderId, message) {
+  try {
+    const { rows } = await query(
+      `SELECT user_id FROM conversation_participants
+       WHERE conversation_id = $1 AND user_id != $2`,
+      [conversationId, senderId]
+    );
+    rows.forEach(r => {
+      io.to(`user:${r.user_id}`).emit('new_message', {
+        conversation_id: conversationId,
+        message,
+      });
+    });
+  } catch (_) {}
+}
+
+/**
+ * Send a real-time notification to a specific user.
+ * Call from any controller: sendNotification(io, userId, notif)
+ */
+async function sendNotification(io, userId, notification) {
+  if (!io) return;
+  io.to(`user:${userId}`).emit('new_notification', { notification });
+}
+
+/**
+ * Check if a user is currently online.
+ */
+function isUserOnline(userId) {
+  return onlineUsers.has(userId) && onlineUsers.get(userId).size > 0;
+}
+
+module.exports = { initSocket, sendNotification, isUserOnline };
