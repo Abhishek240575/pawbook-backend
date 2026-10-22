@@ -1,4 +1,5 @@
 // routes/events.js — Pet Community Events
+// Matches actual Neon schema: events.event_id (UUID), events.user_id (UUID)
 const express = require('express');
 const router  = express.Router();
 const { pool } = require('../db');
@@ -6,35 +7,27 @@ const auth    = require('../middleware/auth');
 
 // GET /api/v1/events
 router.get('/', auth, async (req, res) => {
-  const { city, category, limit = 20, offset = 0 } = req.query;
-  const conditions = ['e.event_date >= CURRENT_DATE'];
-  const params = [];
-  let idx = 1;
-
-  if (city)     { conditions.push(`e.city ILIKE $${idx++}`);     params.push(`%${city}%`); }
-  if (category) { conditions.push(`e.category = $${idx++}`);     params.push(category); }
-
-  const where = 'WHERE ' + conditions.join(' AND ');
-  params.push(Number(limit), Number(offset));
-
+  const { limit = 20, offset = 0 } = req.query;
   try {
     const { rows } = await pool.query(
       `SELECT e.*,
-              u.name AS organizer_name, u.avatar AS organizer_avatar,
+              u.username AS organizer_name, u.avatar_url AS organizer_avatar,
               (SELECT COUNT(*)::int FROM event_rsvps
-               WHERE event_id=e.id AND status='going') AS going_count,
+               WHERE event_id=e.event_id AND status='going') AS going_count,
               (SELECT status FROM event_rsvps
-               WHERE event_id=e.id AND user_id=$${idx}) AS my_rsvp
+               WHERE event_id=e.event_id AND user_id=$1) AS my_rsvp
        FROM events e
-       JOIN users u ON u.id = e.organizer_id
-       ${where}
+       JOIN users u ON u.user_id = e.user_id
+       WHERE e.event_date >= CURRENT_DATE
+         AND (e.status IS NULL OR e.status != 'cancelled')
        ORDER BY e.event_date ASC
-       LIMIT $${idx+1} OFFSET $${idx+2}`,
-      [req.user.id, ...params]
+       LIMIT $2 OFFSET $3`,
+      [req.user.id, Number(limit), Number(offset)]
     );
     res.json({ data: rows });
   } catch (err) {
-    res.json({ data: [] }); // graceful if table missing
+    console.error(err);
+    res.json({ data: [] });
   }
 });
 
@@ -43,12 +36,14 @@ router.get('/:id', auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT e.*,
-              u.name AS organizer_name, u.avatar AS organizer_avatar,
-              (SELECT COUNT(*)::int FROM event_rsvps WHERE event_id=e.id AND status='going') AS going_count,
-              (SELECT status FROM event_rsvps WHERE event_id=e.id AND user_id=$2) AS my_rsvp
+              u.username AS organizer_name, u.avatar_url AS organizer_avatar,
+              (SELECT COUNT(*)::int FROM event_rsvps
+               WHERE event_id=e.event_id AND status='going') AS going_count,
+              (SELECT status FROM event_rsvps
+               WHERE event_id=e.event_id AND user_id=$2) AS my_rsvp
        FROM events e
-       JOIN users u ON u.id = e.organizer_id
-       WHERE e.id=$1`,
+       JOIN users u ON u.user_id = e.user_id
+       WHERE e.event_id=$1`,
       [req.params.id, req.user.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Event not found' });
@@ -61,27 +56,26 @@ router.get('/:id', auth, async (req, res) => {
 
 // POST /api/v1/events — create event
 router.post('/', auth, async (req, res) => {
-  const { title, description, event_date, event_time, location, city,
-          category, cover_image, max_attendees, is_online, meet_link } = req.body;
+  const { title, description, event_date, location,
+          event_type, cover_image, max_attendees, entry_fee } = req.body;
   if (!title || !event_date) {
     return res.status(400).json({ error: 'title and event_date are required' });
   }
   try {
     const { rows } = await pool.query(
       `INSERT INTO events
-         (organizer_id, title, description, event_date, event_time,
-          location, city, category, cover_image, max_attendees, is_online, meet_link)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+         (user_id, title, description, event_date, location,
+          event_type, cover_image, max_attendees, entry_fee, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active') RETURNING *`,
       [req.user.id, title, description || null, event_date,
-       event_time || null, location || null, city || null,
-       category || 'general', cover_image || null,
-       max_attendees || null, is_online || false, meet_link || null]
+       location || null, event_type || 'general',
+       cover_image || null, max_attendees || null, entry_fee || null]
     );
     // Auto-RSVP organizer
     await pool.query(
-      `INSERT INTO event_rsvps (event_id, user_id, status) VALUES ($1,$2,'going')
-       ON CONFLICT DO NOTHING`,
-      [rows[0].id, req.user.id]
+      `INSERT INTO event_rsvps (event_id, user_id, status)
+       VALUES ($1,$2,'going') ON CONFLICT DO NOTHING`,
+      [rows[0].event_id, req.user.id]
     ).catch(() => {});
     res.status(201).json({ data: rows[0] });
   } catch (err) {
@@ -92,8 +86,8 @@ router.post('/', auth, async (req, res) => {
 
 // POST /api/v1/events/:id/rsvp
 router.post('/:id/rsvp', auth, async (req, res) => {
-  const { status } = req.body; // 'going' | 'interested' | 'none'
-  if (!['going','interested','none'].includes(status)) {
+  const { status } = req.body;
+  if (!['going', 'interested', 'none'].includes(status)) {
     return res.status(400).json({ error: 'status must be going|interested|none' });
   }
   try {
