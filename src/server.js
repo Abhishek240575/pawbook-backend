@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const http        = require('http');
 const express     = require('express');
 const helmet      = require('helmet');
 const cors        = require('cors');
@@ -13,6 +14,7 @@ const {
   requestLogger,
 } = require('./middleware');
 const logger      = require('./utils/logger');
+const { initSocket } = require('./socket');
 
 const app  = express();
 const PORT = process.env.PORT || 10000;
@@ -79,10 +81,17 @@ app.use(function (err, req, res, next) {
 });
 
 // ── START ─────────────────────────────────────────────────────
-app.listen(PORT, () => {
+const server = http.createServer(app);
+const io     = initSocket(server);          // attach Socket.io
+
+// Make io available to controllers via app.get('io')
+app.set('io', io);
+
+server.listen(PORT, () => {
   logger.info(`🐾 PawBook API running on port ${PORT}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.info(`Health check: http://localhost:${PORT}/api/v1/health`);
+  logger.info(`WebSocket: Socket.io attached`);
 });
 
 module.exports = app; // for tests
