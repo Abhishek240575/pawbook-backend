@@ -33,6 +33,7 @@ app.use('/api/v1/travel',       require('./routes/travel'));
 app.use('/api/v1/lost-pets',    require('./routes/lostPets'));
 app.use('/api/v1/marketplace',  require('./routes/marketplace'));
 app.use('/api/v1/reviews',      require('./routes/reviews'));
+app.use('/api/v1/adoptions',     require('./routes/adoptions'));
 
 // ── 404 fallback ──────────────────────────────────
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
