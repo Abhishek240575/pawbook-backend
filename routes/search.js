@@ -1,4 +1,7 @@
 // routes/search.js — Global search across users, pets, posts
+// users: user_id(uuid), username, avatar_url, bio
+// posts: id(int), user_id(int) — join via users.user_no
+// Pet: id, "userId"(uuid), name, species, breed, avatar
 const express = require('express');
 const router  = express.Router();
 const { pool } = require('../db');
@@ -21,13 +24,14 @@ router.get('/', auth, async (req, res) => {
     if (type === 'all' || type === 'users') {
       queries.push(
         pool.query(
-          `SELECT id, name, avatar, bio,
-                  (SELECT COUNT(*)::int FROM follows WHERE following_id=u.id) AS followers
+          `SELECT user_id AS id, username AS name, avatar_url AS avatar, bio,
+                  (SELECT COUNT(*)::int FROM follows WHERE following_id=u.user_id) AS followers
            FROM users u
-           WHERE name ILIKE $1 OR bio ILIKE $1
+           WHERE username ILIKE $1 OR bio ILIKE $1
            LIMIT $2`,
           [pattern, limit]
         ).then(r => { results.users = r.rows; })
+        .catch(() => { results.users = []; })
       );
     }
 
@@ -42,6 +46,7 @@ router.get('/', auth, async (req, res) => {
            LIMIT $2`,
           [pattern, limit]
         ).then(r => { results.pets = r.rows; })
+        .catch(() => { results.pets = []; })
       );
     }
 
@@ -50,15 +55,15 @@ router.get('/', auth, async (req, res) => {
         pool.query(
           `SELECT p.id, p.content, p.media_urls, p.created_at,
                   u.user_id AS author_id, u.username AS author_name, u.avatar_url AS author_avatar,
-                  (SELECT COUNT(*)::int FROM comments WHERE post_id=p.id) AS comment_count,
-                  (SELECT COUNT(*)::int FROM post_likes WHERE post_id=p.id) AS like_count
+                  p.comment_count, p.like_count
            FROM posts p
-           JOIN users u ON u.user_id = p.user_id
+           JOIN users u ON u.user_no = p.user_id
            WHERE p.content ILIKE $1
            ORDER BY p.created_at DESC
            LIMIT $2`,
           [pattern, limit]
         ).then(r => { results.posts = r.rows; })
+        .catch(() => { results.posts = []; })
       );
     }
 
@@ -70,20 +75,19 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// GET /api/v1/search/hashtag/:tag — posts by hashtag
+// GET /api/v1/search/hashtag/:tag
 router.get('/hashtag/:tag', auth, async (req, res) => {
-  const tag   = req.params.tag.replace(/^#/, '');
-  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+  const tag    = req.params.tag.replace(/^#/, '');
+  const limit  = Math.min(parseInt(req.query.limit) || 20, 50);
   const offset = parseInt(req.query.offset) || 0;
 
   try {
     const { rows } = await pool.query(
       `SELECT p.id, p.content, p.media_urls, p.created_at,
               u.user_id AS author_id, u.username AS author_name, u.avatar_url AS author_avatar,
-              (SELECT COUNT(*)::int FROM comments WHERE post_id=p.id) AS comment_count,
-              (SELECT COUNT(*)::int FROM post_likes WHERE post_id=p.id) AS like_count
+              p.comment_count, p.like_count
        FROM posts p
-       JOIN users u ON u.user_id = p.user_id
+       JOIN users u ON u.user_no = p.user_id
        WHERE p.content ILIKE $1
        ORDER BY p.created_at DESC
        LIMIT $2 OFFSET $3`,

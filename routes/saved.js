@@ -5,6 +5,7 @@ const { pool } = require('../db');
 const auth    = require('../middleware/auth');
 
 // GET /api/v1/saved — saved posts
+// posts.user_id is integer, users.user_no is integer — join via user_no
 router.get('/', auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -12,7 +13,7 @@ router.get('/', auth, async (req, res) => {
               s.saved_at
        FROM saved_posts s
        JOIN posts p ON p.id = s.post_id
-       JOIN users u ON u.user_id = p.user_id
+       JOIN users u ON u.user_no = p.user_id
        WHERE s.user_id=$1
        ORDER BY s.saved_at DESC
        LIMIT 50`,
@@ -57,17 +58,22 @@ router.delete('/:post_id', auth, async (req, res) => {
 // GET /api/v1/memories — posts from this day in past years
 router.get('/memories', auth, async (req, res) => {
   try {
+    // Get user_no for integer join with posts
+    const { rows: [me] } = await pool.query(
+      'SELECT user_no FROM users WHERE user_id=$1', [req.user.id]
+    );
+    if (!me) return res.json({ data: [] });
     const { rows } = await pool.query(
       `SELECT p.*, u.username AS author_name, u.avatar_url AS author_avatar
        FROM posts p
-       JOIN users u ON u.user_id = p.user_id
+       JOIN users u ON u.user_no = p.user_id
        WHERE p.user_id = $1
          AND EXTRACT(MONTH FROM p.created_at) = EXTRACT(MONTH FROM CURRENT_DATE)
          AND EXTRACT(DAY   FROM p.created_at) = EXTRACT(DAY   FROM CURRENT_DATE)
          AND EXTRACT(YEAR  FROM p.created_at) < EXTRACT(YEAR  FROM CURRENT_DATE)
        ORDER BY p.created_at DESC
        LIMIT 20`,
-      [req.user.id]
+      [me.user_no]
     );
     res.json({ data: rows });
   } catch (err) {
@@ -75,16 +81,16 @@ router.get('/memories', auth, async (req, res) => {
   }
 });
 
-// GET /api/v1/activity — recent activity (likes, comments, follows)
+// GET /api/v1/activity — recent notifications as activity feed
+// notifications has: id, user_id(uuid), type, title, body, link_url, is_read, created_at
+// No actor_id column — return notifications directly
 router.get('/activity', auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT n.id, n.type, n.message, n.created_at,
-              u.username AS actor_name, u.avatar_url AS actor_avatar
-       FROM notifications n
-       LEFT JOIN users u ON u.user_id = n.actor_id
-       WHERE n.user_id=$1
-       ORDER BY n.created_at DESC
+      `SELECT id, type, title, body AS message, link_url, is_read, created_at
+       FROM notifications
+       WHERE user_id=$1
+       ORDER BY created_at DESC
        LIMIT 30`,
       [req.user.id]
     );
@@ -99,24 +105,21 @@ router.get('/birthdays', auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT p.id, p.name, p.species, p.breed, p.avatar, p.dob,
-              u.user_id AS owner_id, u.username AS owner_name, u.avatar_url AS owner_avatar,
-              EXTRACT(DAY FROM AGE(
-                MAKE_DATE(EXTRACT(YEAR FROM CURRENT_DATE)::int,
-                          EXTRACT(MONTH FROM p.dob)::int,
-                          EXTRACT(DAY FROM p.dob)::int),
-                CURRENT_DATE)) AS days_until
+              u.user_id AS owner_id, u.username AS owner_name, u.avatar_url AS owner_avatar
        FROM "Pet" p
        JOIN users u ON u.user_id = p."userId"
        WHERE p.dob IS NOT NULL
-         AND (u.user_id = $1 OR u.id IN (
-           SELECT following_id FROM follows WHERE follower_id=$1
-         ))
-         AND EXTRACT(DAY   FROM p.dob) = EXTRACT(DAY   FROM CURRENT_DATE + INTERVAL '7 days' * 0)
-             OR (
-               EXTRACT(MONTH FROM p.dob) = EXTRACT(MONTH FROM CURRENT_DATE)
-               AND EXTRACT(DAY FROM p.dob) BETWEEN EXTRACT(DAY FROM CURRENT_DATE)
-                                                AND EXTRACT(DAY FROM CURRENT_DATE) + 14
-             )
+         AND (
+           u.user_id = $1
+           OR u.user_id IN (
+             SELECT following_id FROM follows WHERE follower_id=$1
+           )
+         )
+         AND (
+           EXTRACT(MONTH FROM p.dob) = EXTRACT(MONTH FROM CURRENT_DATE)
+           AND EXTRACT(DAY FROM p.dob) BETWEEN EXTRACT(DAY FROM CURRENT_DATE)
+                                           AND EXTRACT(DAY FROM CURRENT_DATE) + 14
+         )
        ORDER BY EXTRACT(MONTH FROM p.dob), EXTRACT(DAY FROM p.dob)
        LIMIT 20`,
       [req.user.id]
@@ -171,10 +174,8 @@ router.post('/fundraising/:id/donate', auth, async (req, res) => {
       `UPDATE fundraising SET raised = raised + $1 WHERE id=$2`,
       [amount, req.params.id]
     );
-    // Log donation
     await pool.query(
-      `INSERT INTO fundraising_donations (campaign_id, user_id, amount)
-       VALUES ($1,$2,$3)`,
+      `INSERT INTO fundraising_donations (campaign_id, user_id, amount) VALUES ($1,$2,$3)`,
       [req.params.id, req.user.id, amount]
     ).catch(() => {});
     res.json({ donated: true, amount });

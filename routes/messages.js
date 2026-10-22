@@ -1,10 +1,12 @@
 // routes/messages.js — Direct Messages & Conversations
+// users: user_id(uuid), username, avatar_url
+// conversations: user1_id UUID, user2_id UUID
 const express = require('express');
 const router  = express.Router();
 const { pool } = require('../db');
 const auth    = require('../middleware/auth');
 
-// GET /api/v1/messages/conversations — list all conversations for current user
+// GET /api/v1/messages/conversations
 router.get('/conversations', auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -34,7 +36,7 @@ router.get('/conversations', auth, async (req, res) => {
 router.get('/users', auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT DISTINCT u.user_id, u.username, u.avatar_url
+      `SELECT DISTINCT u.user_id AS id, u.username AS name, u.avatar_url AS avatar
        FROM conversations c
        JOIN users u ON u.user_id = CASE WHEN c.user1_id=$1 THEN c.user2_id ELSE c.user1_id END
        WHERE c.user1_id=$1 OR c.user2_id=$1
@@ -48,14 +50,15 @@ router.get('/users', auth, async (req, res) => {
   }
 });
 
-// GET /api/v1/messages/search-users?q= — search users to message
+// GET /api/v1/messages/search-users?q=
 router.get('/search-users', auth, async (req, res) => {
   const q = (req.query.q || '').trim();
   if (!q) return res.json([]);
   try {
     const { rows } = await pool.query(
-      `SELECT id, name, avatar FROM users
-       WHERE name ILIKE $1 AND id != $2
+      `SELECT user_id AS id, username AS name, avatar_url AS avatar
+       FROM users
+       WHERE username ILIKE $1 AND user_id != $2
        LIMIT 10`,
       [`%${q}%`, req.user.id]
     );
@@ -66,14 +69,14 @@ router.get('/search-users', auth, async (req, res) => {
   }
 });
 
-// POST /api/v1/messages/conversations — start or get conversation with another user
+// POST /api/v1/messages/conversations — start or get conversation
 router.post('/conversations', auth, async (req, res) => {
   const { other_user_id } = req.body;
   if (!other_user_id) return res.status(400).json({ error: 'other_user_id required' });
   if (other_user_id === req.user.id) return res.status(400).json({ error: 'Cannot message yourself' });
 
-  const user1 = req.user.id < other_user_id ? req.user.id : other_user_id;
-  const user2 = req.user.id < other_user_id ? other_user_id : req.user.id;
+  // Deterministic ordering so UNIQUE(user1_id, user2_id) always matches
+  const [user1, user2] = [req.user.id, other_user_id].sort();
 
   try {
     const { rows } = await pool.query(
@@ -158,7 +161,7 @@ router.post('/conversations/:id', auth, async (req, res) => {
   }
 });
 
-// DELETE /api/v1/messages/:id — delete own message
+// DELETE /api/v1/messages/:id
 router.delete('/:id', auth, async (req, res) => {
   try {
     const { rowCount } = await pool.query(

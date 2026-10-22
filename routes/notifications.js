@@ -1,10 +1,12 @@
 // routes/notifications.js — User Notifications
+// Real schema: id(int), user_id(uuid), type, title, body, link_url, icon_emoji, is_read, created_at
+// No actor_id column in notifications table
 const express = require('express');
 const router  = express.Router();
 const { pool } = require('../db');
 const auth    = require('../middleware/auth');
 
-// GET /api/notifications — get notifications for current user
+// GET /api/v1/notifications
 router.get('/', auth, async (req, res) => {
   const limit  = parseInt(req.query.limit)  || 30;
   const offset = parseInt(req.query.offset) || 0;
@@ -12,22 +14,19 @@ router.get('/', auth, async (req, res) => {
   try {
     const [{ rows: notifs }, { rows: unread }] = await Promise.all([
       pool.query(
-        `SELECT n.*, u.username AS actor_name, u.avatar_url AS actor_avatar
-         FROM notifications n
-         LEFT JOIN users u ON n.actor_id = u.id
-         WHERE n.user_id=$1
-         ORDER BY n.created_at DESC
+        `SELECT id, type, title, body, link_url, icon_emoji, is_read, created_at
+         FROM notifications
+         WHERE user_id=$1
+         ORDER BY created_at DESC
          LIMIT $2 OFFSET $3`,
         [req.user.id, limit, offset]
       ),
       pool.query(
-        `SELECT COUNT(*)::int AS count
-         FROM notifications
+        `SELECT COUNT(*)::int AS count FROM notifications
          WHERE user_id=$1 AND is_read=FALSE`,
         [req.user.id]
       )
     ]);
-
     res.json({ notifications: notifs, unread_count: unread[0].count });
   } catch (err) {
     console.error(err);
@@ -35,13 +34,11 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// PATCH /api/notifications/:id/read — mark single notification read
+// PATCH /api/v1/notifications/:id/read
 router.patch('/:id/read', auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `UPDATE notifications SET is_read=TRUE
-       WHERE id=$1 AND user_id=$2
-       RETURNING id`,
+      `UPDATE notifications SET is_read=TRUE WHERE id=$1 AND user_id=$2 RETURNING id`,
       [req.params.id, req.user.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Notification not found' });
@@ -52,12 +49,11 @@ router.patch('/:id/read', auth, async (req, res) => {
   }
 });
 
-// PATCH /api/notifications/read-all — mark all notifications read
+// PATCH /api/v1/notifications/read-all
 router.patch('/read-all', auth, async (req, res) => {
   try {
     const { rowCount } = await pool.query(
-      `UPDATE notifications SET is_read=TRUE
-       WHERE user_id=$1 AND is_read=FALSE`,
+      `UPDATE notifications SET is_read=TRUE WHERE user_id=$1 AND is_read=FALSE`,
       [req.user.id]
     );
     res.json({ marked_read: rowCount });
@@ -67,7 +63,7 @@ router.patch('/read-all', auth, async (req, res) => {
   }
 });
 
-// DELETE /api/notifications/:id — delete a notification
+// DELETE /api/v1/notifications/:id
 router.delete('/:id', auth, async (req, res) => {
   try {
     const { rowCount } = await pool.query(
@@ -82,21 +78,4 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
-// Internal helper (used by other routes): create a notification
-// Usage: require('./notifications').create(pool, { user_id, type, title, body, actor_id, ref_type, ref_id })
-async function createNotification(pool, data) {
-  const { user_id, type, title, body, actor_id, ref_type, ref_id } = data;
-  try {
-    await pool.query(
-      `INSERT INTO notifications (user_id, type, title, body, actor_id, ref_type, ref_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [user_id, type, title || null, body || null,
-       actor_id || null, ref_type || null, ref_id || null]
-    );
-  } catch (err) {
-    console.error('Notification insert failed:', err.message);
-  }
-}
-
 module.exports = router;
-module.exports.createNotification = createNotification;
