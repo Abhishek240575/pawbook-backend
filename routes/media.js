@@ -1,4 +1,5 @@
 // routes/media.js — Gallery, Albums, Highlights, Tagged media
+// posts.user_id is integer; users.user_no is integer — join via user_no
 const express = require('express');
 const router  = express.Router();
 const { pool } = require('../db');
@@ -32,7 +33,7 @@ router.get('/gallery', auth, async (req, res) => {
   }
 });
 
-// GET /api/v1/media/:user_id — media for a specific user (public)
+// GET /api/v1/media/:userId — media for a specific user (public)
 router.get('/:userId', auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -56,7 +57,7 @@ router.get('/albums', auth, async (req, res) => {
     const { rows } = await pool.query(
       `SELECT a.*,
               (SELECT COUNT(*)::int FROM album_items WHERE album_id=a.id) AS item_count,
-              (SELECT media_url FROM album_items ai
+              (SELECT pm.media_url FROM album_items ai
                JOIN pet_media pm ON pm.id = ai.media_id
                WHERE ai.album_id=a.id ORDER BY ai.created_at LIMIT 1) AS cover_url
        FROM albums a
@@ -132,13 +133,11 @@ router.post('/upload', auth, async (req, res) => {
   }
 });
 
-// GET /api/v1/media/highlights — stories saved as highlights
+// GET /api/v1/media/highlights
 router.get('/highlights', auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT * FROM story_highlights
-       WHERE user_id=$1
-       ORDER BY created_at DESC`,
+      `SELECT * FROM story_highlights WHERE user_id=$1 ORDER BY created_at DESC`,
       [req.user.id]
     );
     res.json({ data: rows });
@@ -148,13 +147,14 @@ router.get('/highlights', auth, async (req, res) => {
 });
 
 // GET /api/v1/media/tagged — posts the current user is tagged in
+// posts.user_id is integer, users.user_no is integer
 router.get('/tagged', auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT p.*, u.username AS author_name, u.avatar_url AS author_avatar
        FROM post_tags pt
        JOIN posts p ON p.id = pt.post_id
-       JOIN users u ON u.user_id = p.user_id
+       JOIN users u ON u.user_no = p.user_id
        WHERE pt.tagged_user_id=$1
        ORDER BY p.created_at DESC
        LIMIT 40`,
