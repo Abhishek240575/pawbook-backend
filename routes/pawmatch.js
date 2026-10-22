@@ -19,7 +19,7 @@ router.get('/discover', auth, async (req, res) => {
 
     // Get pets not yet swiped by this pet (exclude own user's pets)
     const { rows } = await pool.query(
-      `SELECT p.*, u.name AS owner_name, u.avatar AS owner_avatar
+      `SELECT p.*, u.username AS owner_name, u.avatar_url AS owner_avatar
        FROM pets p
        JOIN users u ON p.user_id = u.id
        WHERE p.user_id != $1

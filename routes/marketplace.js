@@ -82,8 +82,8 @@ router.get('/listings/:id', optionalAuth, async (req, res) => {
     );
 
     const { rows: reviews } = await pool.query(
-      `SELECT r.*, u.name AS user_name FROM marketplace_reviews r
-       LEFT JOIN users u ON u.id = r.user_id
+      `SELECT r.*, u.username AS user_name FROM marketplace_reviews r
+       LEFT JOIN users u ON u.user_id = r.user_id
        WHERE r.listing_id=$1 ORDER BY r.created_at DESC LIMIT 20`,
       [req.params.id]
     );
@@ -426,8 +426,8 @@ router.get('/reviews', async (req, res) => {
   if (!listing_id) return res.status(400).json({ error: 'listing_id required' });
   try {
     const { rows } = await pool.query(
-      `SELECT r.*, u.name AS user_name FROM marketplace_reviews r
-       LEFT JOIN users u ON u.id = r.user_id
+      `SELECT r.*, u.username AS user_name FROM marketplace_reviews r
+       LEFT JOIN users u ON u.user_id = r.user_id
        WHERE r.listing_id=$1 ORDER BY r.created_at DESC`,
       [listing_id]
     );

@@ -12,7 +12,7 @@ router.get('/', async (req, res) => {
   try {
     const [{ rows: reviews }, { rows: agg }] = await Promise.all([
       pool.query(
-        `SELECT r.*, u.name AS reviewer_name, u.avatar AS reviewer_avatar
+        `SELECT r.*, u.username AS reviewer_name, u.avatar_url AS reviewer_avatar
          FROM marketplace_reviews r
          JOIN users u ON r.user_id = u.id
          WHERE r.product_id=$1

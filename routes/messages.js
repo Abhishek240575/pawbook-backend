@@ -10,7 +10,7 @@ router.get('/conversations', auth, async (req, res) => {
     const { rows } = await pool.query(
       `SELECT c.*,
               CASE WHEN c.user1_id=$1 THEN c.user2_id ELSE c.user1_id END AS other_user_id,
-              u.name AS other_name, u.avatar AS other_avatar,
+              u.username AS other_name, u.avatar_url AS other_avatar,
               (SELECT body FROM messages
                WHERE conversation_id=c.id ORDER BY created_at DESC LIMIT 1) AS last_message,
               (SELECT created_at FROM messages
@@ -18,7 +18,7 @@ router.get('/conversations', auth, async (req, res) => {
               (SELECT COUNT(*)::int FROM messages
                WHERE conversation_id=c.id AND sender_id!=$1 AND is_read=FALSE) AS unread_count
        FROM conversations c
-       JOIN users u ON u.id = CASE WHEN c.user1_id=$1 THEN c.user2_id ELSE c.user1_id END
+       JOIN users u ON u.user_id = CASE WHEN c.user1_id=$1 THEN c.user2_id ELSE c.user1_id END
        WHERE c.user1_id=$1 OR c.user2_id=$1
        ORDER BY last_message_at DESC NULLS LAST`,
       [req.user.id]
@@ -27,6 +27,42 @@ router.get('/conversations', auth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to load conversations' });
+  }
+});
+
+// GET /api/v1/messages/users — users the current user has conversations with
+router.get('/users', auth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT DISTINCT u.user_id, u.username, u.avatar_url
+       FROM conversations c
+       JOIN users u ON u.user_id = CASE WHEN c.user1_id=$1 THEN c.user2_id ELSE c.user1_id END
+       WHERE c.user1_id=$1 OR c.user2_id=$1
+       ORDER BY u.username`,
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load users' });
+  }
+});
+
+// GET /api/v1/messages/search-users?q= — search users to message
+router.get('/search-users', auth, async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (!q) return res.json([]);
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name, avatar FROM users
+       WHERE name ILIKE $1 AND id != $2
+       LIMIT 10`,
+      [`%${q}%`, req.user.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Search failed' });
   }
 });
 
@@ -56,7 +92,7 @@ router.post('/conversations', auth, async (req, res) => {
 
 // GET /api/v1/messages/conversations/:id — messages in a conversation
 router.get('/conversations/:id', auth, async (req, res) => {
-  const limit  = parseInt(req.query.limit)  || 50;
+  const limit  = parseInt(req.query.limit) || 50;
   const before = req.query.before || null;
 
   try {
@@ -67,9 +103,9 @@ router.get('/conversations/:id', auth, async (req, res) => {
     if (!conv) return res.status(403).json({ error: 'Not your conversation' });
 
     let query = `
-      SELECT m.*, u.name AS sender_name, u.avatar AS sender_avatar
+      SELECT m.*, u.username AS sender_name, u.avatar_url AS sender_avatar
       FROM messages m
-      JOIN users u ON u.id = m.sender_id
+      JOIN users u ON u.user_id = m.sender_id
       WHERE m.conversation_id=$1
     `;
     const params = [req.params.id];

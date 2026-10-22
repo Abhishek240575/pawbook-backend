@@ -12,10 +12,10 @@ router.get('/', auth, async (req, res) => {
     const { rows } = await pool.query(
       `SELECT r.id, r.video_url, r.thumbnail_url, r.caption, r.duration,
               r.view_count, r.like_count, r.comment_count, r.created_at,
-              u.id AS author_id, u.name AS author_name, u.avatar AS author_avatar,
+              u.user_id AS author_id, u.username AS author_name, u.avatar_url AS author_avatar,
               p.id AS pet_id, p.name AS pet_name
        FROM reels r
-       JOIN users u ON u.id = r.user_id
+       JOIN users u ON u.user_id = r.user_id
        LEFT JOIN "Pet" p ON p.id = r.pet_id
        WHERE r.is_active = TRUE
        ORDER BY r.created_at DESC

@@ -12,7 +12,7 @@ router.get('/', auth, async (req, res) => {
   try {
     const [{ rows: notifs }, { rows: unread }] = await Promise.all([
       pool.query(
-        `SELECT n.*, u.name AS actor_name, u.avatar AS actor_avatar
+        `SELECT n.*, u.username AS actor_name, u.avatar_url AS actor_avatar
          FROM notifications n
          LEFT JOIN users u ON n.actor_id = u.id
          WHERE n.user_id=$1

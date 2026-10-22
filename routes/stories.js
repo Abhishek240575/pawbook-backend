@@ -8,9 +8,9 @@ const auth    = require('../middleware/auth');
 router.get('/', auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT s.*, u.name AS author_name, u.avatar AS author_avatar
+      `SELECT s.*, u.username AS author_name, u.avatar_url AS author_avatar
        FROM stories s
-       JOIN users u ON u.id = s.user_id
+       JOIN users u ON u.user_id = s.user_id
        WHERE s.expires_at > NOW()
          AND (s.user_id = $1
               OR s.user_id IN (
@@ -44,9 +44,9 @@ router.get('/mine', auth, async (req, res) => {
 router.get('/user/:userId', auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT s.*, u.name AS author_name, u.avatar AS author_avatar
+      `SELECT s.*, u.username AS author_name, u.avatar_url AS author_avatar
        FROM stories s
-       JOIN users u ON u.id = s.user_id
+       JOIN users u ON u.user_id = s.user_id
        WHERE s.user_id=$1 AND s.expires_at > NOW()
        ORDER BY s.created_at DESC`,
       [req.params.userId]

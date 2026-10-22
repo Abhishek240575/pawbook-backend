@@ -8,7 +8,7 @@ const auth    = require('../middleware/auth');
 router.get('/', auth, async (req, res) => {
   const { category, search } = req.query;
   let query = `
-    SELECT g.*, u.name AS owner_name,
+    SELECT g.*, u.username AS owner_name,
            (SELECT 1 FROM "GroupMember" gm
             WHERE gm."groupId"=g.id AND gm."userId"=$1) AS is_member
     FROM "Group" g
@@ -35,7 +35,7 @@ router.get('/', auth, async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT g.*, u.name AS owner_name,
+      `SELECT g.*, u.username AS owner_name,
               (SELECT role FROM "GroupMember"
                WHERE "groupId"=g.id AND "userId"=$2) AS my_role
        FROM "Group" g
@@ -139,7 +139,7 @@ router.delete('/:id/leave', auth, async (req, res) => {
 router.get('/:id/members', auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT gm.role, gm."joinedAt", u.id, u.name, u.avatar
+      `SELECT gm.role, gm."joinedAt", u.user_id, u.username, u.avatar_url
        FROM "GroupMember" gm
        JOIN users u ON gm."userId" = u.id
        WHERE gm."groupId"=$1

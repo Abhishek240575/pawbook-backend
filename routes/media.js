@@ -151,10 +151,10 @@ router.get('/highlights', auth, async (req, res) => {
 router.get('/tagged', auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT p.*, u.name AS author_name, u.avatar AS author_avatar
+      `SELECT p.*, u.username AS author_name, u.avatar_url AS author_avatar
        FROM post_tags pt
        JOIN posts p ON p.id = pt.post_id
-       JOIN users u ON u.id = p.user_id
+       JOIN users u ON u.user_id = p.user_id
        WHERE pt.tagged_user_id=$1
        ORDER BY p.created_at DESC
        LIMIT 40`,

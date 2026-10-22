@@ -8,9 +8,9 @@ const auth    = require('../middleware/auth');
 router.get('/', auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT l.*, u.name AS streamer_name, u.avatar AS streamer_avatar
+      `SELECT l.*, u.username AS streamer_name, u.avatar_url AS streamer_avatar
        FROM live_streams l
-       JOIN users u ON u.id = l.user_id
+       JOIN users u ON u.user_id = l.user_id
        WHERE l.status='live'
        ORDER BY l.viewer_count DESC, l.started_at DESC
        LIMIT 20`
@@ -50,16 +50,16 @@ router.get('/:id', auth, async (req, res) => {
   try {
     const [streamRes, commentsRes] = await Promise.all([
       pool.query(
-        `SELECT l.*, u.name AS streamer_name, u.avatar AS streamer_avatar
+        `SELECT l.*, u.username AS streamer_name, u.avatar_url AS streamer_avatar
          FROM live_streams l
-         JOIN users u ON u.id = l.user_id
+         JOIN users u ON u.user_id = l.user_id
          WHERE l.id=$1`,
         [req.params.id]
       ),
       pool.query(
-        `SELECT lc.*, u.name, u.avatar
+        `SELECT lc.*, u.username, u.avatar_url
          FROM live_comments lc
-         JOIN users u ON u.id = lc.user_id
+         JOIN users u ON u.user_id = lc.user_id
          WHERE lc.stream_id=$1
          ORDER BY lc.created_at DESC LIMIT 50`,
         [req.params.id]

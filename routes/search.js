@@ -35,9 +35,9 @@ router.get('/', auth, async (req, res) => {
       queries.push(
         pool.query(
           `SELECT p.id, p.name, p.species, p.breed, p.avatar,
-                  u.id AS owner_id, u.name AS owner_name, u.avatar AS owner_avatar
+                  u.user_id AS owner_id, u.username AS owner_name, u.avatar_url AS owner_avatar
            FROM "Pet" p
-           JOIN users u ON u.id = p."userId"
+           JOIN users u ON u.user_id = p."userId"
            WHERE p.name ILIKE $1 OR p.breed ILIKE $1 OR p.species ILIKE $1
            LIMIT $2`,
           [pattern, limit]
@@ -49,11 +49,11 @@ router.get('/', auth, async (req, res) => {
       queries.push(
         pool.query(
           `SELECT p.id, p.content, p.media_urls, p.created_at,
-                  u.id AS author_id, u.name AS author_name, u.avatar AS author_avatar,
+                  u.user_id AS author_id, u.username AS author_name, u.avatar_url AS author_avatar,
                   (SELECT COUNT(*)::int FROM comments WHERE post_id=p.id) AS comment_count,
                   (SELECT COUNT(*)::int FROM post_likes WHERE post_id=p.id) AS like_count
            FROM posts p
-           JOIN users u ON u.id = p.user_id
+           JOIN users u ON u.user_id = p.user_id
            WHERE p.content ILIKE $1
            ORDER BY p.created_at DESC
            LIMIT $2`,
@@ -79,11 +79,11 @@ router.get('/hashtag/:tag', auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT p.id, p.content, p.media_urls, p.created_at,
-              u.id AS author_id, u.name AS author_name, u.avatar AS author_avatar,
+              u.user_id AS author_id, u.username AS author_name, u.avatar_url AS author_avatar,
               (SELECT COUNT(*)::int FROM comments WHERE post_id=p.id) AS comment_count,
               (SELECT COUNT(*)::int FROM post_likes WHERE post_id=p.id) AS like_count
        FROM posts p
-       JOIN users u ON u.id = p.user_id
+       JOIN users u ON u.user_id = p.user_id
        WHERE p.content ILIKE $1
        ORDER BY p.created_at DESC
        LIMIT $2 OFFSET $3`,
