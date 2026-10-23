@@ -30,8 +30,7 @@ const insuranceCtrl    = require('../controllers/insurance.controller');
 const trainingCtrl     = require('../controllers/training.controller');
 const travelCtrl       = require('../controllers/travel.controller');
 const marketCtrl       = require('../controllers/marketplace.controller');
-
-
+const liveCtrl         = require('../controllers/live.controller');
 
 
 
@@ -272,11 +271,18 @@ router.get('/health', async (req, res) => {
 router.use('/pawmatch',      require('./pawmatch'));
 router.use('/vaccinations',  require('./vaccinations'));
 router.use('/reviews',       require('./reviews'));
-router.use('/insurance',     require('./insurance'));
-router.use('/training',      require('./training'));
-router.use('/travel',        require('./travel'));
 router.use('/businesses',    require('./business.routes'));
 router.use('/overpass',      require('./overpass.routes'));
+router.use('/groups',        require('./groups'));
+
+// -- LOST PET --------------------------------------------------
+const lostPetCtrl = require('../controllers/lost_pet.controller');
+router.get('/lost-pets',           lostPetCtrl.getAlerts);
+router.get('/lost-pets/mine',      authenticate, lostPetCtrl.getMyAlerts);
+router.get('/lost-pets/:alert_id', lostPetCtrl.getAlert);
+router.post('/lost-pets',          authenticate, lostPetCtrl.reportLostPet);
+router.patch('/lost-pets/:alert_id', authenticate, lostPetCtrl.updateAlert);
+router.post('/lost-pets/:alert_id/sighting', authenticate, lostPetCtrl.reportSighting);
 
 // -- MESSAGES (DM + Group + Broadcast) ----------------------------------------
 router.get('/messages/users',        authenticate, msgCtrl.getUsers);
@@ -504,6 +510,20 @@ const analyticsRouter = require('express').Router();
 analyticsRouter.get('/me', authenticate, analyticsCtrl.getMyAnalytics);
 router.use('/analytics', analyticsRouter);
 
+// -- LIVE STREAMING ----------------------------------------
+const liveRouter = require('express').Router();
+liveRouter.get('/',                     liveCtrl.listStreams);
+liveRouter.post('/',                    authenticate, [
+  body('title').trim().notEmpty(),
+  body('category').optional().isString(),
+], validate, liveCtrl.createStream);
+liveRouter.get('/:stream_id/token',     authenticate, liveCtrl.getToken);
+liveRouter.post('/:stream_id/end',      authenticate, liveCtrl.endStream);
+liveRouter.post('/:stream_id/comments', authenticate, [
+  body('text').trim().notEmpty(),
+], validate, liveCtrl.addComment);
+liveRouter.post('/:stream_id/viewers',  liveCtrl.updateViewerCount);
+router.use('/live', liveRouter);
 
 module.exports = router;
 
