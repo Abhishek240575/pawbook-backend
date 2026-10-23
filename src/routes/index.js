@@ -73,12 +73,10 @@ authRouter.post('/google', [
   body('id_token').notEmpty(),
 ], validate, authCtrl.googleAuth);
 
+authRouter.post('/logout',         authCtrl.logout);
 authRouter.post('/forgot-password', forgotPassword);
 authRouter.post('/verify-otp',      verifyOtp);
 authRouter.post('/reset-password',  resetPassword);
-
-// Logout — clears httpOnly cookie
-authRouter.post('/logout', authCtrl.logout);
 
 router.use('/auth', authRouter);
 
