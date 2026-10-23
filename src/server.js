@@ -1,11 +1,12 @@
 require('dotenv').config();
 
-const http        = require('http');
-const express     = require('express');
-const helmet      = require('helmet');
-const cors        = require('cors');
-const compression = require('compression');
-const morgan      = require('morgan');
+const http         = require('http');
+const express      = require('express');
+const helmet       = require('helmet');
+const cors         = require('cors');
+const compression  = require('compression');
+const morgan       = require('morgan');
+const cookieParser = require('cookie-parser');
 
 const routes      = require('./routes');
 const { helmetConfig, generalLimiter, authLimiter, postLimiter } = require('./middleware/security');
@@ -48,6 +49,7 @@ app.use(cors({
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser()); // parse httpOnly cookies (pb_token JWT)
 
 // ── LOGGING ───────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'test') {
