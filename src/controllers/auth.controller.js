@@ -106,6 +106,18 @@ const signRefresh = (user_id) =>
     expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d'
   });
 
+// ── Cookie helper ─────────────────────────────────────────────
+const COOKIE_OPTS = {
+  httpOnly: true,
+  secure:   process.env.NODE_ENV === 'production',
+  sameSite: 'strict',
+  maxAge:   7 * 24 * 60 * 60 * 1000, // 7 days in ms
+  path:     '/',
+};
+function setAuthCookie(res, token) {
+  res.cookie('pb_token', token, COOKIE_OPTS);
+}
+
 // ── REGISTER ──────────────────────────────────────────────────────────────────
 const register = async (req, res, next) => {
   const { username, email, password, full_name, role = 'pet_owner', phone } = req.body;
@@ -157,6 +169,7 @@ const register = async (req, res, next) => {
 
     logger.info('User registered', { user_id: user.user_id, role: user.role });
 
+    setAuthCookie(res, token);
     return R.created(res, {
       user, token, refresh,
       message: 'Account created! Please check your email to verify your account.'
@@ -324,6 +337,7 @@ const login = async (req, res, next) => {
     const refresh = signRefresh(user.user_id);
 
     logger.info('User logged in', { user_id: user.user_id });
+    setAuthCookie(res, token);
     return R.ok(res, { user: safeUser, token, refresh }, 'Login successful');
   } catch (err) {
     next(err);
@@ -398,6 +412,7 @@ const googleAuth = async (req, res, next) => {
       const token   = signToken(user.user_id, user.role);
       const refresh = signRefresh(user.user_id);
 
+      setAuthCookie(res, token);
       return R.ok(res, { user, token, refresh }, 'Google login successful');
     } catch (err) {
       await client.query('ROLLBACK');
@@ -445,6 +460,7 @@ const refresh = async (req, res, next) => {
 
     const token      = signToken(rows[0].user_id, rows[0].role);
     const newRefresh = signRefresh(rows[0].user_id);
+    setAuthCookie(res, token);
     return R.ok(res, { token, refresh: newRefresh }, 'Token refreshed');
   } catch (err) {
     if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError')
@@ -518,4 +534,10 @@ const changePassword = async (req, res, next) => {
   }
 };
 
-module.exports = { register, login, refresh, me, changePassword, verifyEmail, resendVerification, googleAuth };
+// ── LOGOUT ────────────────────────────────────────────────────
+const logout = (req, res) => {
+  res.clearCookie('pb_token', { path: '/' });
+  return R.ok(res, null, 'Logged out successfully');
+};
+
+module.exports = { register, login, refresh, me, changePassword, verifyEmail, resendVerification, googleAuth, logout };
