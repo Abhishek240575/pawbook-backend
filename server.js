@@ -1,101 +1,99 @@
-// server.js — PawBook API
 require('dotenv').config();
 
-const express     = require('express');
-const cors        = require('cors');
-const helmet      = require('helmet');
-const rateLimit   = require('express-rate-limit');
+const http         = require('http');
+const express      = require('express');
+const helmet       = require('helmet');
+const cors         = require('cors');
+const compression  = require('compression');
+const morgan       = require('morgan');
+const cookieParser = require('cookie-parser');
+
+const routes      = require('./routes');
+const { helmetConfig, generalLimiter, authLimiter, postLimiter } = require('./middleware/security');
+const {
+  errorHandler,
+  requestLogger,
+} = require('./middleware');
+const logger      = require('./utils/logger');
+const { initSocket } = require('./socket');
 
 const app  = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 10000;
 
-// ── Security ─────────────────────────────────────────────────────────────────
-const helmetConfig = {
-  contentSecurityPolicy: false,
-  crossOriginEmbedderPolicy: false,
-};
-app.use(helmet(helmetConfig));
+// ── SECURITY ──────────────────────────────────────────────────
+app.use(helmetConfig);          // replaces plain helmet() — same protection + our config
+app.set('trust proxy', 1);
 
-// ── CORS ─────────────────────────────────────────────────────────────────────
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').filter(Boolean);
+// ── CORS ──────────────────────────────────────────────────────
+const ALLOWED_ORIGINS = [
+  'https://pawbook.deemona.com',   // production (update when domain is live)
+  'https://pawbook-frontend-cyxo.onrender.com',
+  'http://localhost:5500',          // VS Code Live Server
+  'http://127.0.0.1:5500',
+  'http://localhost:3000',
+  'null',                           // file:// local open
+];
+
 app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Not allowed by CORS'));
-    }
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);          // curl, Postman, mobile apps
+    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
+  methods:     ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// ── Body parsing ──────────────────────────────────────────────────────────────
+// ── COMPRESSION + PARSING ─────────────────────────────────────
+app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser()); // parse httpOnly cookies (pb_token JWT)
 
-// ── Rate limiting ─────────────────────────────────────────────────────────────
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 200,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use('/api/v1/auth', authLimiter);
-app.use('/api/v1/',     generalLimiter);
+// ── LOGGING ───────────────────────────────────────────────────
+if (process.env.NODE_ENV !== 'test') {
+  app.use(morgan('dev'));
+}
+app.use(requestLogger);
 
-// ── Health check ──────────────────────────────────────────────────────────────
-app.get('/health', (req, res) => res.json({ status: 'ok', ts: new Date().toISOString() }));
+// ── RATE LIMITING ─────────────────────────────────────────────
+app.use('/api/v1/auth',  authLimiter);    // 10 req / 15 min  — login, register
+app.use('/api/v1/posts', postLimiter);    // 20 req / hour    — post creation
+app.use('/api/v1',       generalLimiter); // 100 req / 15 min — everything else
 
-// ── Routes ────────────────────────────────────────────────────────────────────
-app.use('/api/v1/auth',          require('./routes/auth'));
-app.use('/api/v1/users',         require('./routes/users'));
-app.use('/api/v1/pets',          require('./routes/pets'));
-app.use('/api/v1/posts',         require('./routes/posts'));
-app.use('/api/v1/appointments',  require('./routes/appointments'));
-app.use('/api/v1/pawmatch',      require('./routes/pawmatch'));
-app.use('/api/v1/vaccinations',  require('./routes/vaccinations'));
-app.use('/api/v1/notifications', require('./routes/notifications'));
-app.use('/api/v1/groups',        require('./routes/groups'));
-app.use('/api/v1/insurance',     require('./routes/insurance'));
-app.use('/api/v1/training',      require('./routes/training'));
-app.use('/api/v1/analytics',     require('./routes/analytics'));
-app.use('/api/v1/nutrition',     require('./routes/nutrition'));
-app.use('/api/v1/discover',      require('./routes/discover'));
-app.use('/api/v1/travel',        require('./routes/travel'));
-app.use('/api/v1/lost-pets',     require('./routes/lostPets'));
-app.use('/api/v1/marketplace',   require('./routes/marketplace'));
-app.use('/api/v1/reviews',       require('./routes/reviews'));
-app.use('/api/v1/messages',      require('./routes/messages'));
-app.use('/api/v1/stories',       require('./routes/stories'));
-app.use('/api/v1/search',        require('./routes/search'));
-app.use('/api/v1/adoptions',     require('./routes/adoptions'));
-app.use('/api/v1/emergency',     require('./routes/emergency'));
-app.use('/api/v1/reels',         require('./routes/reels'));
-app.use('/api/v1/events',        require('./routes/events'));
-app.use('/api/v1/live',          require('./routes/live'));
-// Saved, memories, activity, birthdays, fundraising all served from saved.js
-app.use('/api/v1/saved',         require('./routes/saved'));
-app.use('/api/v1/memories',      require('./routes/saved'));
-app.use('/api/v1/activity',      require('./routes/saved'));
-app.use('/api/v1/birthdays',     require('./routes/saved'));
-app.use('/api/v1/fundraising',   require('./routes/saved'));
-// Media / gallery
-app.use('/api/v1/media',         require('./routes/media'));
+// ── ROUTES ────────────────────────────────────────────────────
+app.use('/api/v1', routes);
+app.use('/api/vaccinations', require('./routes/vaccinations'));
 
-// ── 404 ───────────────────────────────────────────────────────────────────────
-app.use((req, res) => res.status(404).json({ error: 'Not found' }));
-
-// ── Global error handler ──────────────────────────────────────────────────────
-app.use((err, req, res, _next) => {
-  console.error(err.stack || err.message || err);
-  res.status(err.status || 500).json({ error: err.message || 'Server error' });
+// ── 404 ───────────────────────────────────────────────────────
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.method} ${req.originalUrl} not found`
+  });
 });
 
-// ── Start ─────────────────────────────────────────────────────────────────────
-app.listen(PORT, () => console.log(`PawBook API running on port ${PORT}`));
+// ── GLOBAL ERROR HANDLER ──────────────────────────────────────
+app.use(function (err, req, res, next) {
+  if (err.message === 'Not allowed by CORS') {
+    return res.status(403).json({ success: false, message: 'CORS: origin not allowed' });
+  }
+  errorHandler(err, req, res, next);
+});
+
+// ── START ─────────────────────────────────────────────────────
+const server = http.createServer(app);
+const io     = initSocket(server);          // attach Socket.io
+
+// Make io available to controllers via app.get('io')
+app.set('io', io);
+
+server.listen(PORT, () => {
+  logger.info(`🐾 PawBook API running on port ${PORT}`);
+  logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  logger.info(`Health check: http://localhost:${PORT}/api/v1/health`);
+  logger.info(`WebSocket: Socket.io attached`);
+});
+
+module.exports = app; // for tests
