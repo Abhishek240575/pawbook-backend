@@ -1,37 +1,44 @@
 'use strict';
 const { query } = require('../config/db');
 const R = require('../utils/response');
-const crypto = require('crypto');
-const uid = () => crypto.randomBytes(8).toString('hex');
 
-// Agora token generation — requires agora-access-token package
-// npm install agora-access-token
+// Agora token generation — optional, graceful fallback if package missing
 let RtcTokenBuilder, RtcRole;
 try {
   const agora = require('agora-access-token');
   RtcTokenBuilder = agora.RtcTokenBuilder;
   RtcRole = agora.RtcRole;
-} catch(e) { /* package not installed — tokens disabled */ }
+} catch(e) { /* agora-access-token not installed — tokens disabled */ }
 
-const AGORA_APP_ID  = process.env.AGORA_APP_ID  || '';
+const AGORA_APP_ID   = process.env.AGORA_APP_ID  || '';
 const AGORA_APP_CERT = process.env.AGORA_APP_CERT || '';
-const CHAN_PREFIX = 'pb_live_';
+const CHAN_PREFIX     = 'pb_live_';
 
 function generateAgoraToken(channel, uid) {
   if (!RtcTokenBuilder || !AGORA_APP_ID || !AGORA_APP_CERT) return null;
-  const expireAt = Math.floor(Date.now() / 1000) + 3600; // 1 hour
-  return RtcTokenBuilder.buildTokenWithUid(AGORA_APP_ID, AGORA_APP_CERT, channel, uid, RtcRole.PUBLISHER, expireAt);
+  const expireAt = Math.floor(Date.now() / 1000) + 3600;
+  return RtcTokenBuilder.buildTokenWithUid(
+    AGORA_APP_ID, AGORA_APP_CERT, channel, uid, RtcRole.PUBLISHER, expireAt
+  );
 }
 
 // ── LIST active streams ───────────────────────────────────────────────────────
+// live_streams columns: id(int PK), user_id(uuid), title, thumbnail_url,
+//   stream_key, status, viewer_count, started_at, ended_at
 exports.listStreams = async (req, res) => {
   try {
     const { limit = 20, offset = 0 } = req.query;
     const { rows } = await query(
-      `SELECT s.*, u.name AS host_name, u.avatar_url
-       FROM live_streams s LEFT JOIN users u ON u.user_id = s.host_id
-       WHERE s.status = 'live' ORDER BY s.viewer_count DESC LIMIT $1 OFFSET $2`,
-      [Number(limit), Number(offset)]);
+      `SELECT s.id AS stream_id, s.title, s.thumbnail_url, s.status,
+              s.viewer_count, s.started_at,
+              u.username AS host_username, u.full_name AS host_name, u.avatar_url
+         FROM live_streams s
+         LEFT JOIN users u ON u.user_id = s.user_id
+        WHERE s.status = 'live'
+        ORDER BY s.viewer_count DESC NULLS LAST
+        LIMIT $1 OFFSET $2`,
+      [Number(limit), Number(offset)]
+    );
     return R.ok(res, { streams: rows });
   } catch(e) { console.error('[Live] listStreams:', e.message); return R.serverError(res); }
 };
@@ -41,20 +48,22 @@ exports.createStream = async (req, res) => {
   try {
     const { title, category } = req.body;
     if (!title) return R.badRequest(res, 'title required');
-    const streamId = 'stream_' + uid();
-    const channel  = CHAN_PREFIX + streamId;
 
-    await query(
-      `INSERT INTO live_streams (stream_id, host_id, title, category, status)
-       VALUES ($1, $2, $3, $4, 'live')`,
-      [streamId, req.user.userId, title, category || 'general']);
+    const { rows } = await query(
+      `INSERT INTO live_streams (user_id, title, status, started_at)
+       VALUES ($1, $2, 'live', NOW())
+       RETURNING id AS stream_id, title, status, started_at`,
+      [req.user.user_id, title]
+    );
+    const stream = rows[0];
+    const channel = CHAN_PREFIX + stream.stream_id;
+    const agoraToken = generateAgoraToken(channel, req.user.user_id);
 
-    const agoraToken = generateAgoraToken(channel, req.user.userId);
     return R.created(res, {
-      stream_id: streamId,
+      stream_id:    stream.stream_id,
       channel,
       agora_app_id: AGORA_APP_ID || null,
-      agora_token: agoraToken,
+      agora_token:  agoraToken,
     });
   } catch(e) { console.error('[Live] createStream:', e.message); return R.serverError(res); }
 };
@@ -62,13 +71,20 @@ exports.createStream = async (req, res) => {
 // ── GET viewer token ──────────────────────────────────────────────────────────
 exports.getToken = async (req, res) => {
   try {
-    const { rows } = await query('SELECT * FROM live_streams WHERE stream_id=$1', [req.params.stream_id]);
+    const { rows } = await query(
+      'SELECT id AS stream_id FROM live_streams WHERE id = $1',
+      [Number(req.params.stream_id)]
+    );
     if (!rows.length) return R.notFound(res, 'Stream not found');
-    const s = rows[0];
-    const channel = CHAN_PREFIX + s.stream_id;
-    const agoraToken = generateAgoraToken(channel, req.user.userId);
-    return R.ok(res, { stream_id: s.stream_id, channel, agora_app_id: AGORA_APP_ID || null, agora_token: agoraToken });
-  } catch(e) { return R.serverError(res); }
+    const channel = CHAN_PREFIX + rows[0].stream_id;
+    const agoraToken = generateAgoraToken(channel, req.user.user_id);
+    return R.ok(res, {
+      stream_id:    rows[0].stream_id,
+      channel,
+      agora_app_id: AGORA_APP_ID || null,
+      agora_token:  agoraToken,
+    });
+  } catch(e) { console.error('[Live] getToken:', e.message); return R.serverError(res); }
 };
 
 // ── END stream ────────────────────────────────────────────────────────────────
@@ -76,48 +92,49 @@ exports.endStream = async (req, res) => {
   try {
     await query(
       `UPDATE live_streams SET status='ended', ended_at=NOW()
-       WHERE stream_id=$1 AND host_id=$2`,
-      [req.params.stream_id, req.user.userId]);
-    // Notify via socket (server-side emit if io accessible)
+        WHERE id = $1 AND user_id = $2`,
+      [Number(req.params.stream_id), req.user.user_id]
+    );
     const io = req.app.get('io');
     if (io) io.to('live:' + req.params.stream_id).emit('live:ended', { stream_id: req.params.stream_id });
     return R.ok(res, { ended: true });
-  } catch(e) { return R.serverError(res); }
+  } catch(e) { console.error('[Live] endStream:', e.message); return R.serverError(res); }
 };
 
-// ── COMMENT ────────────────────────────────────────────────────────────────────
+// ── ADD COMMENT ────────────────────────────────────────────────────────────────
+// live_comments columns: id(int PK), stream_id(int FK), user_id(uuid), content, created_at
 exports.addComment = async (req, res) => {
   try {
-    const { content } = req.body;
-    if (!content) return R.badRequest(res, 'content required');
-    const user = req.user;
-    const { rows: [stream] } = await query('SELECT host_id FROM live_streams WHERE stream_id=$1', [req.params.stream_id]);
-    if (!stream) return R.notFound(res, 'Stream not found');
+    const text = req.body.text || req.body.content;
+    if (!text) return R.badRequest(res, 'text required');
 
-    const cid = 'lc_' + uid();
-    await query(
-      'INSERT INTO live_comments (comment_id, stream_id, user_id, content) VALUES ($1,$2,$3,$4)',
-      [cid, req.params.stream_id, user.userId, content]);
-
+    const { rows } = await query(
+      `INSERT INTO live_comments (stream_id, user_id, content)
+       VALUES ($1, $2, $3) RETURNING id`,
+      [Number(req.params.stream_id), req.user.user_id, text]
+    );
     const io = req.app.get('io');
     if (io) {
       io.to('live:' + req.params.stream_id).emit('live:comment', {
         stream_id: req.params.stream_id,
-        author: user.name || user.username,
-        text: content,
+        author:    req.user.username || req.user.full_name,
+        text,
       });
     }
-    return R.created(res, { comment_id: cid });
-  } catch(e) { return R.serverError(res); }
+    return R.created(res, { comment_id: rows[0].id });
+  } catch(e) { console.error('[Live] addComment:', e.message); return R.serverError(res); }
 };
 
-// ── VIEWER COUNT (socket updates this, REST is fallback) ─────────────────────
+// ── VIEWER COUNT (REST fallback — socket is primary) ─────────────────────────
 exports.updateViewerCount = async (req, res) => {
   try {
-    const { delta = 1 } = req.body; // +1 join / -1 leave
+    const delta = Number(req.body.delta ?? 1);
     await query(
-      'UPDATE live_streams SET viewer_count = GREATEST(viewer_count + $1, 0) WHERE stream_id=$2',
-      [delta, req.params.stream_id]);
+      `UPDATE live_streams
+          SET viewer_count = GREATEST(COALESCE(viewer_count,0) + $1, 0)
+        WHERE id = $2`,
+      [delta, Number(req.params.stream_id)]
+    );
     return R.ok(res, { updated: true });
-  } catch(e) { return R.serverError(res); }
+  } catch(e) { console.error('[Live] updateViewerCount:', e.message); return R.serverError(res); }
 };
