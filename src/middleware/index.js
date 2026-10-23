@@ -11,11 +11,14 @@ const logger         = require('../utils/logger');
  * Attaches req.user = { user_id, username, role, is_verified }
  */
 const authenticate = async (req, res, next) => {
+  // Accept token from Authorization: Bearer header OR pb_token httpOnly cookie
   const header = req.headers.authorization;
-  if (!header || !header.startsWith('Bearer '))
-    return R.unauthorized(res, 'No token provided');
+  const token = (header && header.startsWith('Bearer '))
+    ? header.split(' ')[1]
+    : (req.cookies && req.cookies.pb_token) || null;
 
-  const token = header.split(' ')[1];
+  if (!token)
+    return R.unauthorized(res, 'No token provided');
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
     // Verify user still exists and is active
