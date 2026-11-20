@@ -420,7 +420,7 @@ async function getVetAppointments(req, res) {
 
     const { rows } = await pool.query(
       `SELECT a.*,
-              u.first_name || ' ' || u.last_name AS owner_name,
+              u.name AS owner_name,
               u.phone AS owner_phone,
               p.name AS pet_name, p.species AS pet_species, p.breed AS pet_breed
        FROM vet_appointments a
