@@ -194,6 +194,13 @@ router.get('/appointments',        authenticate, vetCtrl.getAppointments);
 router.get('/appointments/:id',    authenticate, vetCtrl.getAppointment);
 router.patch('/appointments/:id',  authenticate, vetCtrl.updateAppointment);
 
+// Vet portal: confirm or cancel an appointment (vet_id from JWT)
+router.patch('/appointments/:id/vet-action', authenticate, vetCtrl.vetUpdateAppointment);
+
+// WhatsApp routes (appointment-booked, prescription-sent, SOS)
+const { router: waRouter } = require('./whatsapp.routes');
+router.use('/', waRouter);
+
 // -- PRESCRIPTIONS ---------------------------------------------
 router.get('/prescriptions',       authenticate, vetCtrl.getPrescriptions);
 router.get('/prescriptions/:id',   authenticate, vetCtrl.getPrescription);

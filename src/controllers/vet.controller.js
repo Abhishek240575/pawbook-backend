@@ -1,5 +1,32 @@
 const { pool, query: dbQuery } = require('../config/db');
 const R = require('../utils/response');
+const { notifyIfStatusChanged } = require('../routes/whatsapp.routes');
+
+// Fire-and-forget WA trigger — failures must never break the main operation
+async function _waNotifyBooking(apptId) {
+  try {
+    const wa = require('../routes/whatsapp.service');
+    const { rows } = await pool.query(
+      `SELECT a.*,
+              u.name AS owner_name, u.phone AS owner_phone,
+              v.first_name||' '||v.last_name AS vet_name, v.phone AS vet_phone,
+              p.name AS pet_name
+       FROM vet_appointments a
+       JOIN users u ON u.user_id = a.user_id
+       JOIN vets  v ON v.vet_id  = a.vet_id
+       LEFT JOIN pets p ON p.id  = a.pet_id
+       WHERE a.appointment_id = $1`, [apptId]
+    );
+    if (!rows.length) return;
+    const a = rows[0];
+    await wa.notifyAppointmentBooked({
+      vetPhone: a.vet_phone, ownerPhone: a.owner_phone,
+      vetName: a.vet_name, ownerName: a.owner_name,
+      petName: a.pet_name, apptDate: a.appt_date, apptTime: a.appt_time,
+      consultType: a.consult_type, apptId: a.appointment_id,
+    });
+  } catch (e) { console.warn('[WA] booking notify failed:', e.message); }
+}
 
 // ── GET /api/v1/vets ──────────────────────────────────────────────────────────
 async function listVets(req, res) {
@@ -108,6 +135,8 @@ async function bookAppointment(req, res) {
     );
 
     await client.query('COMMIT');
+    // Fire WhatsApp notification to both vet and owner (non-blocking)
+    _waNotifyBooking(rows[0].appointment_id).catch(() => {});
     return R.created(res, rows[0], 'Appointment booked');
   } catch (err) {
     await client.query('ROLLBACK');
@@ -180,6 +209,13 @@ async function updateAppointment(req, res) {
     if (!rows.length) return R.notFound(res, 'Appointment not found or already completed/cancelled');
     if (status === 'cancelled' && rows[0].slot_id) {
       await pool.query(`UPDATE vet_availability SET is_booked = FALSE WHERE slot_id = $1`, [rows[0].slot_id]);
+    }
+    // Fire WhatsApp status notification (non-blocking)
+    if (status === 'confirmed' || status === 'cancelled') {
+      notifyIfStatusChanged(req.params.id, status, {
+        cancellationReason: reason,
+        cancelledBy: 'owner',
+      }).catch(() => {});
     }
     return R.ok(res, rows[0], 'Appointment updated');
   } catch (err) { return R.serverError(res, err.message); }
@@ -318,6 +354,53 @@ async function getVetChats(req, res) {
   } catch (err) { return R.serverError(res, err.message); }
 }
 
+// ── PATCH /api/v1/appointments/:id/vet-action ────────────────────────────────
+// Vet portal: confirm or cancel a pet owner's appointment
+// JWT must belong to a vet (checked via vets table)
+async function vetUpdateAppointment(req, res) {
+  try {
+    const { status, vet_note, reason } = req.body;
+    if (!['confirmed', 'cancelled'].includes(status)) {
+      return R.badRequest(res, 'status must be confirmed or cancelled');
+    }
+
+    // Verify calling user is the vet for this appointment
+    const { rows: check } = await pool.query(
+      `SELECT a.appointment_id, a.slot_id
+       FROM vet_appointments a
+       JOIN vets v ON v.vet_id = a.vet_id
+       WHERE a.appointment_id = $1 AND v.user_id = $2`,
+      [req.params.id, req.user.user_id]
+    );
+    if (!check.length) return R.notFound(res, 'Appointment not found or not yours');
+
+    const { rows } = await pool.query(
+      `UPDATE vet_appointments SET
+         status     = $1,
+         vet_note   = COALESCE($2, vet_note),
+         cancel_reason = CASE WHEN $1='cancelled' THEN $3 ELSE cancel_reason END,
+         updated_at = NOW()
+       WHERE appointment_id = $4
+       RETURNING *`,
+      [status, vet_note || null, reason || null, req.params.id]
+    );
+
+    // Free the slot if cancelled
+    if (status === 'cancelled' && rows[0].slot_id) {
+      await pool.query(`UPDATE vet_availability SET is_booked = FALSE WHERE slot_id = $1`, [rows[0].slot_id]);
+    }
+
+    // WhatsApp: notify both vet and owner (non-blocking)
+    notifyIfStatusChanged(req.params.id, status, {
+      vetNote: vet_note,
+      cancellationReason: reason,
+      cancelledBy: 'vet',
+    }).catch(() => {});
+
+    return R.ok(res, rows[0], `Appointment ${status}`);
+  } catch (err) { return R.serverError(res, err.message); }
+}
+
 // ── Aliases for existing routes ───────────────────────────────────────────────
 async function getVets(req, res) { return listVets(req, res); }
 async function getNearbyVets(req, res) { return listVets(req, res); }
@@ -331,7 +414,7 @@ async function rateAppointment(req, res) { return reviewVet(req, res); }
 
 module.exports = {
   listVets, getVet, getVetSlots,
-  bookAppointment, getAppointments, getAppointment, updateAppointment,
+  bookAppointment, getAppointments, getAppointment, updateAppointment, vetUpdateAppointment,
   getPrescriptions, getPrescription,
   registerVet, reviewVet, getVetChats,
   // aliases

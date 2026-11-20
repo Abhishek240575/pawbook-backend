@@ -16,6 +16,7 @@ const {
 } = require('./middleware');
 const logger      = require('./utils/logger');
 const { initSocket } = require('./socket');
+const { startCrons } = require('./routes/whatsapp.cron');
 
 const app  = express();
 const PORT = process.env.PORT || 10000;
@@ -88,6 +89,14 @@ const io     = initSocket(server);          // attach Socket.io
 
 // Make io available to controllers via app.get('io')
 app.set('io', io);
+
+// Start WhatsApp cron jobs (appointment reminders + vaccination reminders)
+// Guard with env check so local dev without Twilio creds doesn't crash
+if (process.env.TWILIO_ACCOUNT_SID) {
+  startCrons();
+} else {
+  logger.info('WhatsApp crons skipped — TWILIO_ACCOUNT_SID not set');
+}
 
 server.listen(PORT, () => {
   logger.info(`🐾 PawBook API running on port ${PORT}`);
