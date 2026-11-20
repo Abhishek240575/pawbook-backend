@@ -414,9 +414,10 @@ async function getVetAppointments(req, res) {
     const { date, status } = req.query;
     const params = [req.user.user_id];
     const filters = [];
-    if (date)   { params.push(date);   filters.push(`a.appt_date = $${params.length}`); }
+    if (date)   { params.push(date);   filters.push(`a.appt_date::date = $${params.length}`); }
+    else        { filters.push(`a.appt_date >= CURRENT_DATE`); }
     if (status) { params.push(status); filters.push(`a.status = $${params.length}`); }
-    const where = filters.length ? 'AND ' + filters.join(' AND ') : '';
+    const where = 'AND ' + filters.join(' AND ');
 
     const { rows } = await pool.query(
       `SELECT a.*,
