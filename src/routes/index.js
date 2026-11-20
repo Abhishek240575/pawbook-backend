@@ -194,6 +194,9 @@ router.get('/appointments',        authenticate, vetCtrl.getAppointments);
 router.get('/appointments/:id',    authenticate, vetCtrl.getAppointment);
 router.patch('/appointments/:id',  authenticate, vetCtrl.updateAppointment);
 
+// Vet portal: get vet's own schedule (vet_id from JWT)
+router.get('/vet/schedule', authenticate, vetCtrl.getVetAppointments);
+
 // Vet portal: confirm or cancel an appointment (vet_id from JWT)
 router.patch('/appointments/:id/vet-action', authenticate, vetCtrl.vetUpdateAppointment);
 

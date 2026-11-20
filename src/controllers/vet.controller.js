@@ -409,7 +409,31 @@ async function getVetProfile(req, res) {
   return getVet(req, res);
 }
 async function getMyAppointments(req, res) { return getAppointments(req, res); }
-async function getVetAppointments(req, res) { return R.ok(res, []); } // stub
+async function getVetAppointments(req, res) {
+  try {
+    const { date, status } = req.query;
+    const params = [req.user.user_id];
+    const filters = [];
+    if (date)   { params.push(date);   filters.push(`a.appt_date = $${params.length}`); }
+    if (status) { params.push(status); filters.push(`a.status = $${params.length}`); }
+    const where = filters.length ? 'AND ' + filters.join(' AND ') : '';
+
+    const { rows } = await pool.query(
+      `SELECT a.*,
+              u.first_name || ' ' || u.last_name AS owner_name,
+              u.phone AS owner_phone,
+              p.name AS pet_name, p.species AS pet_species, p.breed AS pet_breed
+       FROM vet_appointments a
+       JOIN vets v   ON v.vet_id = a.vet_id
+       JOIN users u  ON u.user_id = a.user_id
+       LEFT JOIN pets p ON p.id = a.pet_id
+       WHERE v.user_id = $1 ${where}
+       ORDER BY a.appt_date ASC, a.appt_time ASC`,
+      params
+    );
+    return R.ok(res, rows);
+  } catch (err) { return R.serverError(res, err.message); }
+}
 async function rateAppointment(req, res) { return reviewVet(req, res); }
 
 module.exports = {
