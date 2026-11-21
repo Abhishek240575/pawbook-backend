@@ -31,6 +31,7 @@ const trainingCtrl     = require('../controllers/training.controller');
 const travelCtrl       = require('../controllers/travel.controller');
 const marketCtrl       = require('../controllers/marketplace.controller');
 const liveCtrl         = require('../controllers/live.controller');
+const aiCtrl           = require('../controllers/ai.controller');
 
 
 
@@ -79,6 +80,15 @@ authRouter.post('/verify-otp',      verifyOtp);
 authRouter.post('/reset-password',  resetPassword);
 
 router.use('/auth', authRouter);
+
+// -- AI CHAT ---------------------------------------------------
+// No auth required — works for guests and logged-in users
+// Rate limited by the global limiter; additional per-route limit below
+const aiRateLimit = require('express-rate-limit').rateLimit({
+  windowMs: 60 * 1000, max: 20,
+  message: { success: false, message: 'Too many AI requests, please slow down.' }
+});
+router.post('/ai/chat', aiRateLimit, aiCtrl.chat);
 
 // -- USERS -----------------------------------------------------
 const userRouter = require('express').Router();
